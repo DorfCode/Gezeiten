@@ -207,26 +207,32 @@
         return undefined;
     }
 
-    // Werte der BSH kommen in cm; Werte < 20 werden als bereits in Metern angenommen
-    function toMeters(v) {
-        const n = typeof v === 'string' ? parseFloat(v.replace(',', '.')) : Number(v);
-        if (!isFinite(n)) return null;
-        return Math.abs(n) > 20 ? n / 100 : n;
+    // BSH-Zeitstempel "2026-11-02 12:56:00+01:00" -> Date.
+    // Das Leerzeichen muss zu "T" werden, sonst liefert Safari (iPhone) "Invalid Date".
+    function parseTs(s) {
+        return new Date(String(s).trim().replace(' ', 'T'));
     }
 
-    function fmtReference(raw, unitLabel) {
-        const m = toMeters(raw);
-        if (m === null) return String(raw);
-        return `${fmtNum(m)} m${unitLabel ? ' ' + unitLabel : ''}`;
+    // MHW/MNW kommen als Zahl in cm über Pegelnull (PNP), z. B. 645.0
+    function fmtReference(raw) {
+        const n = Number(raw);
+        if (!isFinite(n)) return String(raw);
+        return `${fmtNum(n / 100)} m über PNP`;
     }
 
+    // Abweichung kommt als Text, z. B. "-0,1 m", "-0,5 bis -0,75 m", "+/-0,0 m"
     function fmtDeviation(raw) {
-        const m = toMeters(raw);
-        if (m === null) return { text: '–', cls: '' };
-        const sign = m > 0 ? '+' : (m < 0 ? '−' : '±');
+        if (raw === null || raw === undefined || raw === '') return { text: '–', cls: '' };
+        const text = String(raw)
+            .replace(/\s*m\s*$/, '')        // Einheit steht im Spaltenkopf
+            .replace(/\+\/-/g, '±')
+            .replace(/-/g, '−')             // echtes Minuszeichen
+            .replace(/\s*bis\s*/g, ' … ');
+        const first = parseFloat(String(raw).replace('+/-', '').replace(',', '.'));
+        const isZero = /\+\/-/.test(raw) || first === 0;
         return {
-            text: sign + fmtNum(Math.abs(m)),
-            cls: m > 0 ? 'plus' : (m < 0 ? 'minus' : '')
+            text,
+            cls: isZero || !isFinite(first) ? '' : (first > 0 ? 'plus' : 'minus')
         };
     }
 
@@ -244,15 +250,14 @@
             const props = geojson.properties || {};
 
             // ---- Footer: MHW / MNW aus dem JSON ----
-            const refUnit = pick(props, ['reference_unit', 'mean_water_reference', 'reference']) || '';
-            const mhw = pick(props, ['mean_high_water', 'MHW', 'mhw', 'mean_high_water_value']);
-            const mnw = pick(props, ['mean_low_water', 'MNW', 'mnw', 'mean_low_water_value']);
-            document.getElementById('mhw-value').textContent = mhw !== undefined ? fmtReference(mhw, refUnit) : 'k. A.';
-            document.getElementById('mnw-value').textContent = mnw !== undefined ? fmtReference(mnw, refUnit) : 'k. A.';
+            const mhw = props.mean_high_water;
+            const mnw = props.mean_low_water;
+            document.getElementById('mhw-value').textContent = mhw != null ? fmtReference(mhw) : 'k. A.';
+            document.getElementById('mnw-value').textContent = mnw != null ? fmtReference(mnw) : 'k. A.';
 
             // ---- Header: Stand der Vorhersage ----
-            const created = pick(props, ['creation_forecast', 'forecast_creation_time', 'creation_time', 'issued', 'timestamp']);
-            const createdDate = created ? new Date(created) : null;
+            const created = pick(props, ['forecast_timestamp', 'automated_curveforecast_timestamp']);
+            const createdDate = created ? parseTs(created) : null;
             document.getElementById('meta').textContent = (createdDate && !isNaN(createdDate))
                 ? `Stand: ${fmtDateTime(createdDate)} Uhr`
                 : `Abgerufen: ${fmtDateTime(new Date())} Uhr`;
@@ -268,10 +273,10 @@
 
             const filtered = events
                 .filter(item => {
-                    const ts = new Date(item.event_timestamp);
+                    const ts = parseTs(item.event_timestamp);
                     return ts >= startLimit && ts < endLimit;
                 })
-                .sort((a, b) => new Date(a.event_timestamp) - new Date(b.event_timestamp));
+                .sort((a, b) => parseTs(a.event_timestamp) - parseTs(b.event_timestamp));
 
             tbody.innerHTML = '';
 
@@ -282,7 +287,7 @@
 
             let lastDay = '';
             filtered.forEach(item => {
-                const d = new Date(item.event_timestamp);
+                const d = parseTs(item.event_timestamp);
                 const dayKey = d.toDateString();
 
                 // Tages-Trennzeile
