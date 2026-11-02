@@ -16,6 +16,7 @@
             --line: #edf1f5;
             --stripe: #f4f8fb;
             --error: #c0392b;
+            --high: #ffd8a8;
         }
         * { box-sizing: border-box; }
         body {
@@ -144,6 +145,8 @@
         .tide .arrow { display: inline-block; width: 1.4em; font-size: 18px; font-weight: 700; }
         .tide .phase { font-size: 14px; font-weight: 600; }
         tr.past td { opacity: 0.45; }
+        /* Abweichung über +1 m: ganze Zeile markieren */
+        tr.ev.high td { background-color: var(--high); font-weight: 700; }
         .msg { text-align: center; padding: 24px 10px; color: var(--muted); white-space: normal; }
         .msg.err { color: var(--error); }
 
@@ -165,6 +168,7 @@
             opacity: 0.9;
         }
         .legend a { color: #fff; }
+        .legend-high { background: var(--high); color: var(--text); border-radius: 3px; font-weight: 700; }
     </style>
 </head>
 <body>
@@ -202,6 +206,7 @@
             <b>↑</b> Hochwasser · <b>↓</b> Niedrigwasser<br>
             Nipp/Spring = Nipp-/Springzeit (aus der Mondphase berechnet)<br>
             Abw. = Abweichung vom mittleren Hoch-/Niedrigwasser (MHW/MNW) · – = keine Vorhersage der BSH<br>
+            <span class="legend-high">&nbsp;Markiert&nbsp;</span> = mehr als 1 m über dem Mittel<br>
             <span id="station-note"></span>
             Quelle: <a href="https://www.bsh.de" target="_blank" rel="noopener">Bundesamt für Seeschifffahrt und Hydrographie</a>
         </div>
@@ -288,12 +293,11 @@
             .replace(/\+\/-/g, '±')
             .replace(/-/g, '−')             // echtes Minuszeichen
             .replace(/\s*bis\s*/g, ' … ');
-        const first = parseFloat(String(raw).replace('+/-', '').replace(',', '.'));
-        const isZero = /\+\/-/.test(raw) || first === 0;
-        return {
-            text,
-            cls: isZero || !isFinite(first) ? '' : (first > 0 ? 'plus' : 'minus')
-        };
+        // Höchster Wert der Angabe, z. B. "+0,75 bis +1,25 m" -> 1.25; "+/-0,0 m" -> 0
+        const nums = (String(raw).replace(/\+\/-/g, '').match(/[+-]?\d+(?:,\d+)?/g) || [])
+            .map(n => parseFloat(n.replace(',', '.')));
+        const max = nums.length ? Math.max(...nums) : NaN;
+        return { text, max };
     }
 
     function fmtDateTime(d) {
@@ -427,11 +431,11 @@
                 const dev = fmtDeviation(item.forecast_deviation ?? item.mos_forecast_r0_deviation);
 
                 const tr = document.createElement('tr');
-                tr.className = 'ev' + (d < now ? ' past' : '');
+                tr.className = 'ev' + (d < now ? ' past' : '') + (dev.max > 1 ? ' high' : '');
                 tr.innerHTML = `
                     <td class="time">${pad(d.getHours())}:${pad(d.getMinutes())}</td>
                     <td class="tide" title="${ev}">${tideHtml}</td>
-                    <td class="dev ${dev.cls}">${dev.text}</td>
+                    <td class="dev">${dev.text}</td>
                 `;
                 tbody.appendChild(tr);
             });
