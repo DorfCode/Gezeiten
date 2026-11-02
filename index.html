@@ -201,7 +201,7 @@
         <div class="legend">
             <b>↑</b> Hochwasser · <b>↓</b> Niedrigwasser<br>
             Nipp/Spring = Nipp-/Springzeit (aus der Mondphase berechnet)<br>
-            Abw. = Abweichung vom mittleren Hoch-/Niedrigwasser (MHW/MNW) · ≈ = selbst berechnet<br>
+            Abw. = Abweichung vom mittleren Hoch-/Niedrigwasser (MHW/MNW)<br>
             Quelle: <a href="https://www.bsh.de" target="_blank" rel="noopener">Bundesamt für Seeschifffahrt und Hydrographie</a>
         </div>
     </footer>
@@ -280,32 +280,6 @@
     }
 
     // Abweichung kommt als Text, z. B. "-0,1 m", "-0,5 bis -0,75 m", "+/-0,0 m"
-    // Abweichung einer Tide ermitteln. Reihenfolge:
-    // 1. offizieller BSH-Text, 2. MOS-Modelltexte (r0, r1, …),
-    // 3. selbst berechnet aus einem vorhergesagten Wert minus MHW/MNW
-    //    (forecast_value, MOS-Werte oder die automatische Kurvenvorhersage zum Tidenzeitpunkt).
-    // Berechnete Werte werden mit "≈" gekennzeichnet.
-    function getDeviation(item, props, curveForecast) {
-        const textKeys = ['forecast_deviation', 'mos_forecast_r0_deviation'];
-        for (let r = 1; r <= 9; r++) textKeys.push(`mos_forecast_r${r}_deviation`);
-        const txt = pick(item, textKeys);
-        if (txt !== undefined) return fmtDeviation(txt);
-
-        const ev = String(item.event || '').toUpperCase();
-        const mean = Number(ev === 'HW' ? props.mean_high_water : ev === 'NW' ? props.mean_low_water : NaN);
-        if (!isFinite(mean)) return { text: '–', cls: '' };
-
-        const valueKeys = ['forecast_value', 'mos_forecast_r0_value'];
-        for (let r = 1; r <= 9; r++) valueKeys.push(`mos_forecast_r${r}_value`);
-        let val = Number(pick(item, valueKeys));
-        if (!isFinite(val)) val = curveForecast.get(parseTs(item.event_timestamp).getTime());
-        if (!isFinite(val)) return { text: '–', cls: '' };
-
-        const m = Math.round((val - mean) / 10) / 10;   // auf 0,1 m runden
-        const sign = m > 0 ? '+' : (m < 0 ? '−' : '±');
-        return { text: '≈' + sign + fmtNum(Math.abs(m), 1), cls: '' };
-    }
-
     function fmtDeviation(raw) {
         if (raw === null || raw === undefined || raw === '') return { text: '–', cls: '' };
         const text = String(raw)
@@ -393,15 +367,6 @@
             // ---- Tabelle ----
             const events = props.high_water_low_water || [];
 
-            // Automatische Kurvenvorhersage nach Zeitpunkt (Ersatz, wenn eine Tide keine Abweichung hat)
-            const curveForecast = new Map();
-            (props.curve || []).forEach(pt => {
-                const v = Number(pt.automated_curve_forecast);
-                if (pt.timestamp && isFinite(v) && pt.automated_curve_forecast !== '') {
-                    curveForecast.set(parseTs(pt.timestamp).getTime(), v);
-                }
-            });
-
             // Zeitfenster: ganzer heutiger Tag + 5 weitere Tage
             const now = new Date();
             const startLimit = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -446,7 +411,7 @@
                     + (phaseText ? `<span class="phase">${phaseText}</span>` : '');
 
                 // Abweichung: offizielle BSH-Abweichung, sonst MOS-Modell
-                const dev = getDeviation(item, props, curveForecast);
+                const dev = fmtDeviation(item.forecast_deviation ?? item.mos_forecast_r0_deviation);
 
                 const tr = document.createElement('tr');
                 tr.className = 'ev' + (d < now ? ' past' : '');
