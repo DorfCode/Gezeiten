@@ -67,6 +67,17 @@
             font-size: 12px;
             opacity: 0.8;
         }
+        .forecast-text {
+            background: #eef5fa;
+            color: var(--blue-dark);
+            border-left: 4px solid var(--blue);
+            padding: 10px 14px;
+            font-size: 14px;
+            line-height: 1.45;
+        }
+        .forecast-text p { margin: 0; }
+        .forecast-text p + p { margin-top: 6px; }
+        .forecast-text[hidden] { display: none; }
 
         /* Tabelle */
         table {
@@ -143,6 +154,8 @@
         <div class="meta" id="meta">&nbsp;</div>
     </header>
 
+    <div class="forecast-text" id="forecast-text" hidden></div>
+
     <table id="forecast-table">
         <thead>
             <tr>
@@ -213,6 +226,20 @@
         return new Date(String(s).trim().replace(' ', 'T'));
     }
 
+    // BSH-Text sicher als HTML ausgeben: alles escapen, nur <b> und <br> wieder zulassen.
+    // Falls Umlaute doppelt kodiert ankommen ("KÃ¼ste"), werden sie repariert.
+    function safeBsHtml(s) {
+        let t = String(s);
+        if (/Ã[\u0080-¿]/.test(t)) {
+            try { t = decodeURIComponent(escape(t)); } catch (e) { /* unverändert lassen */ }
+        }
+        return t
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+            .replace(/&lt;(\/?)b&gt;/gi, '<$1b>')
+            .replace(/&lt;br\s*\/?&gt;/gi, '<br>')
+            .replace(/<\/b>\s*<b>/g, ' ');   // "<b>etwa</b> <b>1/2 m </b>" zusammenfassen
+    }
+
     // MHW/MNW kommen als Zahl in cm über Pegelnull (PNP), z. B. 645.0
     function fmtReference(raw) {
         const n = Number(raw);
@@ -254,6 +281,16 @@
             const mnw = props.mean_low_water;
             document.getElementById('mhw-value').textContent = mhw != null ? fmtReference(mhw) : 'k. A.';
             document.getElementById('mnw-value').textContent = mnw != null ? fmtReference(mnw) : 'k. A.';
+
+            // ---- Vorhersagetext der BSH ----
+            const texts = [props.forecast_text, props.information_text]
+                .map(t => t && typeof t === 'object' ? t.de : t)
+                .filter(t => t && String(t).trim() !== '');
+            const textBox = document.getElementById('forecast-text');
+            if (texts.length) {
+                textBox.innerHTML = texts.map(t => `<p>${safeBsHtml(t)}</p>`).join('');
+                textBox.hidden = false;
+            }
 
             // ---- Header: Stand der Vorhersage ----
             const created = pick(props, ['forecast_timestamp', 'automated_curveforecast_timestamp']);
