@@ -42,6 +42,34 @@
             }
         }
 
+        /* Orts-Auswahl */
+        .stations {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 6px;
+            padding: 8px;
+            background: var(--blue-dark);
+        }
+        .stations button {
+            font: inherit;
+            font-size: 13px;
+            font-weight: 600;
+            line-height: 1.15;
+            padding: 8px 4px;
+            min-height: 44px;
+            border: 1px solid rgba(255,255,255,0.35);
+            border-radius: 6px;
+            background: transparent;
+            color: #fff;
+            cursor: pointer;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .stations button[aria-pressed="true"] {
+            background: #fff;
+            color: var(--blue-dark);
+            border-color: #fff;
+        }
+
         /* Header */
         header {
             background: var(--blue);
@@ -142,8 +170,10 @@
 <body>
 
 <div class="container">
+    <nav class="stations" id="stations" aria-label="Ort wählen"></nav>
+
     <header>
-        <h1>⚓ Hooge Anleger</h1>
+        <h1 id="station-title">⚓ Hooge Anleger</h1>
         <div class="sub">Wasserstandsvorhersage · Daten: BSH</div>
         <div class="meta" id="meta">&nbsp;</div>
     </header>
@@ -178,7 +208,16 @@
 </div>
 
 <script>
-    const apiUrl = 'https://gdi.bsh.de/ldproxy/rest/services/WaterLevelForecast/collections/waterlevelforecastdata/items/hooge_anleger?lang=en&f=json';
+    const API_BASE = 'https://gdi.bsh.de/ldproxy/rest/services/WaterLevelForecast/collections/waterlevelforecastdata/items/';
+    const STATIONS = [
+        { id: 'schluettsiel',   short: 'Schlütt­siel', name: 'Schlüttsiel' },
+        { id: 'langeness_nord', short: 'Lange­neß',    name: 'Langeneß Nord' },
+        { id: 'hooge_anleger',  short: 'Hooge',        name: 'Hooge Anleger' },
+        { id: 'groede_anleger', short: 'Gröde',        name: 'Gröde Anleger' },
+    ];
+    const DEFAULT_STATION = 'hooge_anleger';
+    let currentStation = null;
+    let requestCounter = 0;   // verhindert, dass eine ältere Antwort eine neuere überschreibt
     const DAYS_AHEAD = 5;               // heute + 5 weitere Tage
     const WEEKDAYS = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'];
 
@@ -261,13 +300,47 @@
         return `${WEEKDAYS[d.getDay()]} ${pad(d.getDate())}.${pad(d.getMonth() + 1)}. ${pad(d.getHours())}:${pad(d.getMinutes())}`;
     }
 
-    async function loadForecast() {
+    function renderButtons() {
+        const nav = document.getElementById('stations');
+        nav.innerHTML = STATIONS.map(s =>
+            `<button type="button" data-id="${s.id}" aria-pressed="false">${s.short}</button>`).join('');
+        nav.addEventListener('click', e => {
+            const btn = e.target.closest('button[data-id]');
+            if (btn) selectStation(btn.dataset.id);
+        });
+    }
+
+    function selectStation(id) {
+        const station = STATIONS.find(s => s.id === id) || STATIONS.find(s => s.id === DEFAULT_STATION);
+        currentStation = station;
+        document.querySelectorAll('#stations button').forEach(b =>
+            b.setAttribute('aria-pressed', String(b.dataset.id === station.id)));
+        document.getElementById('station-title').textContent = '⚓ ' + station.name;
+        document.title = 'Gezeiten – ' + station.name;
+        // Ort in der Adresse merken (teilbarer Link); Standard Hooge ohne Zusatz
+        const hash = station.id === DEFAULT_STATION ? '' : '#' + station.id;
+        if (location.hash !== hash) history.replaceState(null, '', location.pathname + location.search + hash);
+        loadForecast(station);
+    }
+
+    async function loadForecast(station) {
         const tbody = document.getElementById('forecast-body');
+        const textBox = document.getElementById('forecast-text');
+        const myRequest = ++requestCounter;
+
+        // Anzeige zurücksetzen
+        tbody.innerHTML = '<tr><td colspan="3" class="msg">Lade Daten …</td></tr>';
+        textBox.hidden = true;
+        textBox.innerHTML = '';
+        document.getElementById('meta').innerHTML = '&nbsp;';
+        document.getElementById('mhw-value').textContent = '–';
+        document.getElementById('mnw-value').textContent = '–';
 
         try {
-            const response = await fetch(apiUrl);
+            const response = await fetch(`${API_BASE}${station.id}?lang=en&f=json`);
             if (!response.ok) throw new Error(`HTTP ${response.status}`);
             const geojson = await response.json();
+            if (myRequest !== requestCounter) return;   // inzwischen anderer Ort gewählt
             const props = geojson.properties || {};
 
             // ---- Footer: MHW / MNW aus dem JSON ----
@@ -280,7 +353,6 @@
             const texts = [props.forecast_text, props.information_text]
                 .map(t => t && typeof t === 'object' ? t.de : t)
                 .filter(t => t && String(t).trim() !== '');
-            const textBox = document.getElementById('forecast-text');
             if (texts.length) {
                 textBox.innerHTML = texts.map(t => `<p>${safeBsHtml(t)}</p>`).join('');
                 textBox.hidden = false;
@@ -353,11 +425,13 @@
             });
 
         } catch (error) {
+            if (myRequest !== requestCounter) return;
             tbody.innerHTML = `<tr><td colspan="3" class="msg err">Fehler beim Laden: ${error.message}</td></tr>`;
         }
     }
 
-    loadForecast();
+    renderButtons();
+    selectStation(location.hash.slice(1) || DEFAULT_STATION);
 </script>
 </body>
 </html>
