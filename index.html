@@ -3,57 +3,84 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Wasserstandsvorhersage - Hooge Anleger</title>
+    <title>Wasserstandsvorhersage – Hooge Anleger</title>
     <style>
         body {
-            font-family: "Segoe UI", Arial, sans-serif;
-            background-color: #ffffff;
-            color: #333;
-            margin: 20px;
+            font-family: "Segoe UI", -apple-system, BlinkMacSystemFont, Roboto, Arial, sans-serif;
+            background-color: #f7f9fa;
+            color: #1a1a1a;
+            padding: 24px 12px;
+            margin: 0;
         }
-        .table-container {
-            max-width: 800px;
+        .container {
+            max-width: 820px;
             margin: 0 auto;
-            border-bottom: 3px solid #005a96;
+            background: #ffffff;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            border-radius: 4px;
+            overflow: hidden;
         }
         table {
             width: 100%;
             border-collapse: collapse;
             font-size: 15px;
-        }
-        th {
-            background-color: #005a96;
-            color: #ffffff;
-            padding: 12px 15px;
             text-align: left;
-            border-top: 3px solid #003a63;
         }
-        td {
-            padding: 10px 15px;
-            border-bottom: 1px solid #eaeaea;
+        thead th {
+            background-color: #005a8c;
+            color: #ffffff;
+            font-weight: 600;
+            padding: 12px 16px;
+            border-bottom: 2px solid #003e61;
         }
-        /* Alternating row tint similar to the reference */
-        tr:nth-child(even) td {
-            background-color: #f2f7fb; 
+        tbody td {
+            padding: 10px 16px;
+            border-bottom: 1px solid #edf1f5;
         }
-        /* Darker separator line between days */
-        .day-separator td {
-            border-top: 2px solid #005a96;
+        tbody tr:nth-child(even) {
+            background-color: #f4f8fb;
         }
-        /* Orange tone for Phase (Np) */
-        .phase {
-            color: #c28145; 
+        tr.day-border td {
+            border-top: 2px solid #005a8c;
         }
-        .event {
-            font-weight: normal;
+        .date-col {
+            font-weight: 500;
+            white-space: nowrap;
         }
-        .arrow-up::before { content: "↑ "; }
-        .arrow-down::before { content: "↓ "; }
+        .event-hw, .event-nw {
+            color: #111;
+        }
+        .phase-np {
+            color: #d18239;
+            font-weight: 500;
+        }
+        .deviation {
+            font-variant-numeric: tabular-nums;
+        }
+        .status-cell {
+            text-align: center;
+            padding: 30px;
+            color: #666;
+        }
+        /* Fußbereich für mittlere Werte (MHW / MNW) */
+        .reference-footer {
+            background-color: #005a8c;
+            color: #ffffff;
+            padding: 14px 18px;
+            font-size: 15px;
+            line-height: 1.6;
+            border-top: 1px solid #00446b;
+        }
+        .reference-footer span.label {
+            font-weight: bold;
+            display: inline-block;
+            min-width: 55px;
+        }
     </style>
 </head>
 <body>
 
-<div class="table-container">
+<div class="container">
     <table id="forecast-table">
         <thead>
             <tr>
@@ -66,98 +93,145 @@
             </tr>
         </thead>
         <tbody id="forecast-body">
-            <tr><td colspan="6" style="text-align:center;">Lade Daten...</td></tr>
+            <tr>
+                <td colspan="6" class="status-cell">Lade Vorhersagedaten des BSH...</td>
+            </tr>
         </tbody>
     </table>
+
+    <div class="reference-footer" id="reference-values">
+        <div><span class="label">MHW:</span> <span id="mhw-value">6,45 m über PNP</span></div>
+        <div><span class="label">MNW:</span> <span id="mnw-value">3,59 m über PNP</span></div>
+    </div>
 </div>
 
 <script>
-    // BSH API endpoint for Hooge Anleger
     const apiUrl = 'https://gdi.bsh.de/ldproxy/rest/services/WaterLevelForecast/collections/waterlevelforecastdata/items/hooge_anleger?lang=en&f=json';
 
-    async function loadData() {
+    async function loadForecast() {
+        const tbody = document.getElementById('forecast-body');
+
         try {
             const response = await fetch(apiUrl);
-            if (!response.ok) throw new Error('Netzwerkfehler beim Abrufen der BSH-Daten');
-            const data = await response.json();
+            if (!response.ok) throw new Error(`HTTP-Fehler ${response.status}`);
             
-            // Helpful for debugging via DevTools (F12) to see exact property names
-            console.log("BSH JSON Data:", data);
+            const geojson = await response.json();
+            const props = geojson.properties || {};
 
-            const tbody = document.getElementById('forecast-body');
-            tbody.innerHTML = '';
+            // Mittlere Werte aus den Metadaten der Station aktualisieren (mit Fallback auf Pegel Hooge Anleger)
+            const mhwRaw = props.mean_high_water ?? props.mhw ?? props.mean_high_water_level;
+            const mnwRaw = props.mean_low_water ?? props.mnw ?? props.mean_low_water_level;
 
-            // The JSON typically holds peak predictions in an array under properties
-            // Note: If the table loads empty, check the console and update "extremes" to the correct key (e.g., "forecasts", "tides")
-            const forecasts = data.properties?.extremes || data.properties?.forecast || [];
+            if (mhwRaw != null) {
+                const mhwVal = mhwRaw > 50 ? (mhwRaw / 100).toFixed(2) : Number(mhwRaw).toFixed(2);
+                document.getElementById('mhw-value').textContent = `${mhwVal.replace('.', ',')} m über PNP`;
+            }
+            if (mnwRaw != null) {
+                const mnwVal = mnwRaw > 50 ? (mnwRaw / 100).toFixed(2) : Number(mnwRaw).toFixed(2);
+                document.getElementById('mnw-value').textContent = `${mnwVal.replace('.', ',')} m über PNP`;
+            }
+            
+            const events = props.high_water_low_water || [];
+            const chartDatum = props.chartdatum_relative_to_gaugezero || 0;
 
-            // Define time window (Today + next 3 days)
-            const today = new Date();
-            const maxDate = new Date();
-            maxDate.setDate(today.getDate() + 3);
+            if (!Array.isArray(events) || events.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" class="status-cell">Keine Vorhersagewerte im Datensatz vorhanden.</td></tr>';
+                return;
+            }
 
-            const filteredData = forecasts.filter(item => {
-                const itemDate = new Date(item.timestamp || item.time);
-                return itemDate >= today && itemDate <= maxDate;
+            // Zeitfenster: Ab heute 00:00 Uhr bis in 3 Tagen 23:59 Uhr
+            const now = new Date();
+            const startLimit = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
+            const endLimit = new Date(startLimit);
+            endLimit.setDate(startLimit.getDate() + 3);
+            endLimit.setHours(23, 59, 59, 999);
+
+            const filteredEvents = events.filter(item => {
+                const ts = new Date(item.event_timestamp);
+                return ts >= startLimit && ts <= endLimit;
             });
 
-            let currentDayStr = '';
+            if (filteredEvents.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" class="status-cell">Keine Ereignisse für die nächsten 3 Tage ermittelt.</td></tr>';
+                return;
+            }
 
-            filteredData.forEach(item => {
-                const dateObj = new Date(item.timestamp || item.time);
-                
-                // Format Date (e.g., "Mo., 02.11.2026")
-                const days = ['So.', 'Mo.', 'Di.', 'Mi.', 'Do.', 'Fr.', 'Sa.'];
-                const dayName = days[dateObj.getDay()];
-                const dateStr = `${dayName}, ${String(dateObj.getDate()).padStart(2, '0')}.${String(dateObj.getMonth() + 1).padStart(2, '0')}.${dateObj.getFullYear()}`;
-                
-                // Format Time (e.g., "00:08")
-                const timeStr = `${String(dateObj.getHours()).padStart(2, '0')}:${String(dateObj.getMinutes()).padStart(2, '0')}`;
-                
-                // Map values dynamically. Adjust object keys if the JSON schema differs from these standard placeholders.
-                const height = item.height != null ? item.height.toFixed(2).replace('.', ',') : '-';
-                const event = item.event || item.type || ''; 
-                const phase = item.phase || 'Np';
-                const deviation = item.deviation || item.difference || '-';
+            tbody.innerHTML = '';
+            let lastDayKey = '';
 
-                const tr = document.createElement('tr');
-                
-                // Group by day to prevent repeating the date column
-                if (dateStr !== currentDayStr) {
-                    if (currentDayStr !== '') tr.classList.add('day-separator');
-                    tr.innerHTML += `<td>${dateStr}</td>`;
-                    currentDayStr = dateStr;
-                } else {
-                    tr.innerHTML += `<td></td>`; 
+            filteredEvents.forEach(item => {
+                const dateObj = new Date(item.event_timestamp);
+
+                const weekdays = ['So.', 'Mo.', 'Di.', 'Mi.', 'Do.', 'Fr.', 'Sa.'];
+                const dayName = weekdays[dateObj.getDay()];
+                const day = String(dateObj.getDate()).padStart(2, '0');
+                const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+                const year = dateObj.getFullYear();
+                const dateLabel = `${dayName}, ${day}.${month}.${year}`;
+
+                const hours = String(dateObj.getHours()).padStart(2, '0');
+                const minutes = String(dateObj.getMinutes()).padStart(2, '0');
+                const timeLabel = `${hours}:${minutes}`;
+
+                // Höhe über SKN in Metern berechnen
+                let heightFormatted = '-';
+                const rawValue = item.tidal_prediction_value ?? item.forecast_value;
+                if (rawValue != null) {
+                    let cmOverSkn = rawValue;
+                    if (chartDatum > 0 && rawValue > chartDatum) {
+                        cmOverSkn = rawValue - chartDatum;
+                    }
+                    heightFormatted = (cmOverSkn / 100).toFixed(2).replace('.', ',');
                 }
 
-                // Add Arrows for High Water / Low Water
-                let eventHtml = event;
-                if (event.includes('HW')) eventHtml = `<span class="arrow-up event">HW</span>`;
-                else if (event.includes('NW')) eventHtml = `<span class="arrow-down event">NW</span>`;
+                // Ereignisdarstellung mit Pfeilen
+                let eventDisplay = item.event || '';
+                if (item.event === 'HW') {
+                    eventDisplay = '<span class="event-hw">↑ HW</span>';
+                } else if (item.event === 'NW') {
+                    eventDisplay = '<span class="event-nw">↓ NW</span>';
+                }
+
+                const phaseDisplay = item.phase || item.tidal_phase || 'Np';
+
+                // Abweichung vom Normalwert formatieren
+                let devDisplay = '-';
+                const devVal = item.forecast_deviation ?? item.mos_forecast_r0_deviation;
+                if (devVal != null && !isNaN(devVal)) {
+                    const devNum = Number(devVal);
+                    const sign = devNum > 0 ? '+' : '';
+                    devDisplay = `${sign}${devNum.toFixed(1).replace('.', ',')} m`;
+                }
+
+                const tr = document.createElement('tr');
+                const isNewDay = dateLabel !== lastDayKey;
+
+                if (isNewDay) {
+                    if (lastDayKey !== '') tr.classList.add('day-border');
+                    tr.innerHTML += `<td class="date-col">${dateLabel}</td>`;
+                    lastDayKey = dateLabel;
+                } else {
+                    tr.innerHTML += `<td class="date-col"></td>`;
+                }
 
                 tr.innerHTML += `
-                    <td>${timeStr}</td>
-                    <td>${height}</td>
-                    <td>${eventHtml}</td>
-                    <td class="phase">${phase}</td>
-                    <td>${deviation}</td>
+                    <td>${timeLabel}</td>
+                    <td>${heightFormatted}</td>
+                    <td>${eventDisplay}</td>
+                    <td class="phase-np">${phaseDisplay}</td>
+                    <td class="deviation">${devDisplay}</td>
                 `;
 
                 tbody.appendChild(tr);
             });
 
-            if (filteredData.length === 0) {
-                 tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color: #666;">Keine Extremwerte für die nächsten 3 Tage gefunden. Bitte die Datenstruktur in der Console prüfen.</td></tr>';
-            }
-
         } catch (error) {
-            console.error("Fehler beim Laden der API:", error);
-            document.getElementById('forecast-body').innerHTML = `<tr><td colspan="6" style="text-align:center; color:red;">Fehler beim Laden der Vorhersagedaten.</td></tr>`;
+            console.error('Fehler bei der Datenverarbeitung:', error);
+            tbody.innerHTML = `<tr><td colspan="6" class="status-cell" style="color: #b00020;">Fehler beim Laden der BSH-Daten: ${error.message}</td></tr>`;
         }
     }
 
-    loadData();
+    loadForecast();
 </script>
 </body>
 </html>
