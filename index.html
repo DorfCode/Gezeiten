@@ -104,10 +104,11 @@
         }
         tr.ev:nth-child(even) td { background-color: var(--stripe); }
         .time { font-weight: 600; }
-        .sym { font-size: 18px; font-weight: 700; }
-        .sym.hw { color: var(--hw); }
-        .sym.nw { color: var(--nw); }
-        .height { font-weight: 600; }
+        .tide { font-weight: 700; }
+        .tide.hw { color: var(--hw); }
+        .tide.nw { color: var(--nw); }
+        .tide .arrow { display: inline-block; width: 1.1em; }
+        tr.past td { opacity: 0.45; }
         .dev.plus { color: var(--plus); }
         .dev.minus { color: var(--minus); }
         .msg { text-align: center; padding: 24px 10px; color: var(--muted); white-space: normal; }
@@ -147,12 +148,11 @@
             <tr>
                 <th>Zeit</th>
                 <th title="Hochwasser / Niedrigwasser">Tide</th>
-                <th title="Höhe über Seekartennull">Höhe&nbsp;[m]</th>
-                <th title="Abweichung vom mittleren Wert">Δ&nbsp;[m]</th>
+                <th title="Abweichung vom mittleren Hoch-/Niedrigwasser">Abw.&nbsp;[m]</th>
             </tr>
         </thead>
         <tbody id="forecast-body">
-            <tr><td colspan="4" class="msg">Lade Daten …</td></tr>
+            <tr><td colspan="3" class="msg">Lade Daten …</td></tr>
         </tbody>
     </table>
 
@@ -162,9 +162,9 @@
             <div><span class="label">MNW:</span><span id="mnw-value">–</span></div>
         </div>
         <div class="legend">
-            <b>▲</b> Hochwasser (HW) · <b>▼</b> Niedrigwasser (NW)<br>
-            Höhe in m über Seekartennull (SKN) · Δ = Abweichung vom mittleren Verlauf<br>
-            MHW/MNW = mittleres Hoch-/Niedrigwasser<br>
+            <b>↑ HW</b> Hochwasser · <b>↓ NW</b> Niedrigwasser<br>
+            <b>Sp</b> Springzeit · <b>Np</b> Nippzeit (aus der Mondphase berechnet)<br>
+            Abw. = Abweichung vom mittleren Hoch-/Niedrigwasser (MHW/MNW)<br>
             Quelle: <a href="https://www.bsh.de" target="_blank" rel="noopener">Bundesamt für Seeschifffahrt und Hydrographie</a>
         </div>
     </footer>
@@ -172,8 +172,28 @@
 
 <script>
     const apiUrl = 'https://gdi.bsh.de/ldproxy/rest/services/WaterLevelForecast/collections/waterlevelforecastdata/items/hooge_anleger?lang=en&f=json';
-    const DAYS_AHEAD = 3;
+    const DAYS_AHEAD = 5;               // heute + 5 weitere Tage
     const WEEKDAYS = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'];
+
+    // ---- Spring-/Nippzeit aus der Mondphase ----
+    // Springzeit tritt in der Deutschen Bucht ca. 1–2 Tage nach Voll-/Neumond ein,
+    // Nippzeit ca. 1–2 Tage nach dem ersten/letzten Viertel.
+    const SYNODIC_DAYS = 29.530588853;
+    const REF_NEW_MOON = Date.UTC(2000, 0, 6, 18, 14);   // bekannter Neumond
+    const TIDE_DELAY_DAYS = 1.5;                         // Verzögerung Mond -> Tide
+    const WINDOW_DAYS = 1.5;                             // +/- Fenster um den Höhepunkt
+
+    function springNeap(date) {
+        const days = (date.getTime() - REF_NEW_MOON) / 86400000 - TIDE_DELAY_DAYS;
+        const age = ((days % SYNODIC_DAYS) + SYNODIC_DAYS) % SYNODIC_DAYS; // 0..29,5
+        const quarter = SYNODIC_DAYS / 4;
+        // Abstand zum nächsten Neu-/Vollmond bzw. Viertel
+        const dSpring = Math.min(age % (2 * quarter), 2 * quarter - age % (2 * quarter));
+        const dNeap = Math.abs((age % (2 * quarter)) - quarter);
+        if (dSpring <= WINDOW_DAYS) return 'Sp';
+        if (dNeap <= WINDOW_DAYS) return 'Np';
+        return '';
+    }
 
     const pad = n => String(n).padStart(2, '0');
     const fmtNum = (v, digits = 2) => v.toFixed(digits).replace('.', ',');
@@ -239,23 +259,24 @@
 
             // ---- Tabelle ----
             const events = props.high_water_low_water || [];
-            const chartDatum = Number(props.chartdatum_relative_to_gaugezero) || 0;
 
+            // Zeitfenster: ganzer heutiger Tag + 5 weitere Tage
             const now = new Date();
-            const endLimit = new Date(now);
-            endLimit.setDate(now.getDate() + DAYS_AHEAD);
+            const startLimit = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+            const endLimit = new Date(startLimit);
+            endLimit.setDate(endLimit.getDate() + DAYS_AHEAD + 1);
 
             const filtered = events
                 .filter(item => {
                     const ts = new Date(item.event_timestamp);
-                    return ts >= now && ts <= endLimit;
+                    return ts >= startLimit && ts < endLimit;
                 })
                 .sort((a, b) => new Date(a.event_timestamp) - new Date(b.event_timestamp));
 
             tbody.innerHTML = '';
 
             if (filtered.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="4" class="msg">Keine Vorhersagedaten für die nächsten Tage verfügbar.</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="3" class="msg">Keine Vorhersagedaten für die nächsten Tage verfügbar.</td></tr>';
                 return;
             }
 
@@ -269,41 +290,33 @@
                     const dayRow = document.createElement('tr');
                     dayRow.className = 'day';
                     const isToday = dayKey === now.toDateString();
-                    dayRow.innerHTML = `<td colspan="4">${isToday ? 'Heute, ' : ''}${WEEKDAYS[d.getDay()]} ${pad(d.getDate())}.${pad(d.getMonth() + 1)}.</td>`;
+                    dayRow.innerHTML = `<td colspan="3">${isToday ? 'Heute, ' : ''}${WEEKDAYS[d.getDay()]} ${pad(d.getDate())}.${pad(d.getMonth() + 1)}.</td>`;
                     tbody.appendChild(dayRow);
                     lastDay = dayKey;
                 }
 
-                // Höhe über SKN
-                let height = '–';
-                const rawHeight = item.forecast_value ?? item.tidal_prediction_value;
-                if (rawHeight != null) {
-                    const skn = chartDatum > 0 ? (rawHeight - chartDatum) : rawHeight;
-                    height = fmtNum(skn / 100);
-                }
-
-                // Ereignis als Symbol
+                // Ereignis: Pfeil + (Sp/Np) + HW/NW
                 const ev = String(item.event || '').toUpperCase();
-                let sym = ev || '–', symCls = '';
-                if (ev === 'HW') { sym = '▲'; symCls = 'hw'; }
-                else if (ev === 'NW') { sym = '▼'; symCls = 'nw'; }
+                const phase = springNeap(d);
+                let tideHtml = ev || '–', tideCls = '';
+                if (ev === 'HW') { tideHtml = `<span class="arrow">↑</span>${phase}HW`; tideCls = 'hw'; }
+                else if (ev === 'NW') { tideHtml = `<span class="arrow">↓</span>${phase}NW`; tideCls = 'nw'; }
 
                 // Abweichung: offizielle BSH-Abweichung, sonst MOS-Modell
                 const dev = fmtDeviation(item.forecast_deviation ?? item.mos_forecast_r0_deviation);
 
                 const tr = document.createElement('tr');
-                tr.className = 'ev';
+                tr.className = 'ev' + (d < now ? ' past' : '');
                 tr.innerHTML = `
                     <td class="time">${pad(d.getHours())}:${pad(d.getMinutes())}</td>
-                    <td class="sym ${symCls}" title="${ev}">${sym}</td>
-                    <td class="height">${height}</td>
+                    <td class="tide ${tideCls}">${tideHtml}</td>
                     <td class="dev ${dev.cls}">${dev.text}</td>
                 `;
                 tbody.appendChild(tr);
             });
 
         } catch (error) {
-            tbody.innerHTML = `<tr><td colspan="4" class="msg err">Fehler beim Laden: ${error.message}</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="3" class="msg err">Fehler beim Laden: ${error.message}</td></tr>`;
         }
     }
 
