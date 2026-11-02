@@ -211,9 +211,9 @@
 <script>
     const API_BASE = 'https://gdi.bsh.de/ldproxy/rest/services/WaterLevelForecast/collections/waterlevelforecastdata/items/';
     const STATIONS = [
+        { id: 'wittduen_hafen', short: 'Wittdün',      name: 'Wittdün Hafen' },
         { id: 'hooge_anleger',  short: 'Hooge',        name: 'Hooge Anleger' },
-        { id: 'groede_anleger', short: 'Gröde',        name: 'Gröde Anleger' },
-        { id: 'schluettsiel',   short: 'Schlütt­siel', name: 'Schlüttsiel' },
+        { id: 'dagebuell',      short: 'Dagebüll',     name: 'Dagebüll' },
     ];
     const DEFAULT_STATION = 'hooge_anleger';
     let currentStation = null;
@@ -389,7 +389,7 @@
 
             tbody.innerHTML = '';
 
-            // Hinweis, wenn die BSH für diesen Pegel nur Hochwasser liefert (z. B. Gröde)
+            // Hinweis, wenn die BSH für diesen Pegel nur Hochwasser liefert
             if (filtered.length && !filtered.some(i => String(i.event).toUpperCase() === 'NW')) {
                 document.getElementById('station-note').innerHTML =
                     'Für diesen Pegel liefert die BSH nur Hochwasser-Zeiten.<br>';
