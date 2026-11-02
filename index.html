@@ -195,13 +195,14 @@
 
     <footer>
         <div class="ref">
-            <div><span class="label">MHW:</span><span id="mhw-value">–</span></div>
-            <div><span class="label">MNW:</span><span id="mnw-value">–</span></div>
+            <div id="mhw-row"><span class="label">MHW:</span><span id="mhw-value">–</span></div>
+            <div id="mnw-row"><span class="label">MNW:</span><span id="mnw-value">–</span></div>
         </div>
         <div class="legend">
             <b>↑</b> Hochwasser · <b>↓</b> Niedrigwasser<br>
             Nipp/Spring = Nipp-/Springzeit (aus der Mondphase berechnet)<br>
-            Abw. = Abweichung vom mittleren Hoch-/Niedrigwasser (MHW/MNW)<br>
+            Abw. = Abweichung vom mittleren Hoch-/Niedrigwasser (MHW/MNW) · – = keine Vorhersage der BSH<br>
+            <span id="station-note"></span>
             Quelle: <a href="https://www.bsh.de" target="_blank" rel="noopener">Bundesamt für Seeschifffahrt und Hydrographie</a>
         </div>
     </footer>
@@ -334,6 +335,9 @@
         document.getElementById('meta').innerHTML = '&nbsp;';
         document.getElementById('mhw-value').textContent = '–';
         document.getElementById('mnw-value').textContent = '–';
+        document.getElementById('mhw-row').hidden = false;
+        document.getElementById('mnw-row').hidden = false;
+        document.getElementById('station-note').innerHTML = '';
 
         try {
             const response = await fetch(`${API_BASE}${station.id}?lang=en&f=json`);
@@ -345,8 +349,11 @@
             // ---- Footer: MHW / MNW aus dem JSON ----
             const mhw = props.mean_high_water;
             const mnw = props.mean_low_water;
-            document.getElementById('mhw-value').textContent = mhw != null ? fmtReference(mhw) : 'k. A.';
-            document.getElementById('mnw-value').textContent = mnw != null ? fmtReference(mnw) : 'k. A.';
+            // Nur anzeigen, was im JSON steht
+            document.getElementById('mhw-value').textContent = mhw != null ? fmtReference(mhw) : '';
+            document.getElementById('mnw-value').textContent = mnw != null ? fmtReference(mnw) : '';
+            document.getElementById('mhw-row').hidden = mhw == null;
+            document.getElementById('mnw-row').hidden = mnw == null;
 
             // ---- Vorhersagetext der BSH ----
             const texts = [props.forecast_text, props.information_text]
@@ -381,6 +388,12 @@
                 .sort((a, b) => parseTs(a.event_timestamp) - parseTs(b.event_timestamp));
 
             tbody.innerHTML = '';
+
+            // Hinweis, wenn die BSH für diesen Pegel nur Hochwasser liefert (z. B. Gröde)
+            if (filtered.length && !filtered.some(i => String(i.event).toUpperCase() === 'NW')) {
+                document.getElementById('station-note').innerHTML =
+                    'Für diesen Pegel liefert die BSH nur Hochwasser-Zeiten.<br>';
+            }
 
             if (filtered.length === 0) {
                 tbody.innerHTML = '<tr><td colspan="3" class="msg">Keine Vorhersagedaten für die nächsten Tage verfügbar.</td></tr>';
