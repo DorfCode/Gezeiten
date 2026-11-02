@@ -222,7 +222,9 @@
     ];
     const DEFAULT_STATION = 'hooge_anleger';
     let currentStation = null;
-    let requestCounter = 0;   // verhindert, dass eine ältere Antwort eine neuere überschreibt
+    let requestCounter = 0;
+    let lastLoaded = 0;
+    const REFRESH_MS = 10 * 60 * 1000;   // alle 10 Minuten neu laden   // verhindert, dass eine ältere Antwort eine neuere überschreibt
     const DAYS_AHEAD = 5;               // heute + 5 weitere Tage
     const WEEKDAYS = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'];
 
@@ -327,27 +329,35 @@
         loadForecast(station);
     }
 
-    async function loadForecast(station) {
+    // silent = Hintergrund-Aktualisierung: alte Anzeige stehen lassen, bis neue Daten da sind
+    async function loadForecast(station, silent = false) {
         const tbody = document.getElementById('forecast-body');
         const textBox = document.getElementById('forecast-text');
         const myRequest = ++requestCounter;
 
-        // Anzeige zurücksetzen
-        tbody.innerHTML = '<tr><td colspan="3" class="msg">Lade Daten …</td></tr>';
-        textBox.hidden = true;
-        textBox.innerHTML = '';
-        document.getElementById('meta').innerHTML = '&nbsp;';
-        document.getElementById('mhw-value').textContent = '–';
-        document.getElementById('mnw-value').textContent = '–';
-        document.getElementById('mhw-row').hidden = false;
-        document.getElementById('mnw-row').hidden = false;
-        document.getElementById('station-note').innerHTML = '';
+        if (!silent) {
+            tbody.innerHTML = '<tr><td colspan="3" class="msg">Lade Daten …</td></tr>';
+            textBox.hidden = true;
+            textBox.innerHTML = '';
+            document.getElementById('meta').innerHTML = '&nbsp;';
+            document.getElementById('mhw-value').textContent = '–';
+            document.getElementById('mnw-value').textContent = '–';
+        }
 
         try {
-            const response = await fetch(`${API_BASE}${station.id}?lang=en&f=json`);
+            // cache: 'no-store' -> immer frisch von der BSH holen, nie aus dem Browser-Cache
+            const response = await fetch(`${API_BASE}${station.id}?lang=en&f=json`, { cache: 'no-store' });
             if (!response.ok) throw new Error(`HTTP ${response.status}`);
             const geojson = await response.json();
             if (myRequest !== requestCounter) return;   // inzwischen anderer Ort gewählt
+            lastLoaded = Date.now();
+
+            // Anzeige für die neuen Daten zurücksetzen
+            textBox.hidden = true;
+            textBox.innerHTML = '';
+            document.getElementById('mhw-row').hidden = false;
+            document.getElementById('mnw-row').hidden = false;
+            document.getElementById('station-note').innerHTML = '';
             const props = geojson.properties || {};
 
             // ---- Footer: MHW / MNW aus dem JSON ----
@@ -371,9 +381,10 @@
             // ---- Header: Stand der Vorhersage ----
             const created = pick(props, ['forecast_timestamp', 'automated_curveforecast_timestamp']);
             const createdDate = created ? parseTs(created) : null;
+            const fetched = new Date();
             document.getElementById('meta').textContent = (createdDate && !isNaN(createdDate))
-                ? `Stand: ${fmtDateTime(createdDate)} Uhr`
-                : `Abgerufen: ${fmtDateTime(new Date())} Uhr`;
+                ? `BSH-Stand: ${fmtDateTime(createdDate)} Uhr · abgerufen ${pad(fetched.getHours())}:${pad(fetched.getMinutes())} Uhr`
+                : `Abgerufen: ${fmtDateTime(fetched)} Uhr`;
 
             // ---- Tabelle ----
             const events = props.high_water_low_water || [];
@@ -442,12 +453,24 @@
 
         } catch (error) {
             if (myRequest !== requestCounter) return;
+            if (silent) return;   // Hintergrund-Aktualisierung fehlgeschlagen: alte Daten stehen lassen
             tbody.innerHTML = `<tr><td colspan="3" class="msg err">Fehler beim Laden: ${error.message}</td></tr>`;
         }
     }
 
     renderButtons();
     selectStation(location.hash.slice(1) || DEFAULT_STATION);
+
+    // Automatisch aktualisieren: regelmäßig und wenn die Seite wieder geöffnet wird
+    // (z. B. Handy entsperrt oder zurück zum Browser-Tab)
+    function refreshIfStale() {
+        if (document.visibilityState === 'visible' && currentStation && Date.now() - lastLoaded > REFRESH_MS) {
+            loadForecast(currentStation, true);
+        }
+    }
+    setInterval(refreshIfStale, 60 * 1000);
+    document.addEventListener('visibilitychange', refreshIfStale);
+    window.addEventListener('pageshow', e => { if (e.persisted) { lastLoaded = 0; refreshIfStale(); } });
 </script>
 </body>
 </html>
