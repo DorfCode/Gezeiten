@@ -209,6 +209,8 @@
             <span class="legend-high">&nbsp;Markiert&nbsp;</span> = 1 m oder mehr über dem Mittel<br>
             <span id="station-note"></span>
             Quelle: <a href="https://www.bsh.de" target="_blank" rel="noopener">Bundesamt für Seeschifffahrt und Hydrographie</a>
+            <span id="bsh-link-row" hidden><br>Maßgeblich ist die
+                <a id="bsh-link" href="#" target="_blank" rel="noopener">offizielle BSH-Vorhersage für diesen Ort</a></span>
         </div>
     </footer>
 </div>
@@ -364,9 +366,16 @@
             document.getElementById('mhw-row').hidden = false;
             document.getElementById('mnw-row').hidden = false;
             document.getElementById('station-note').innerHTML = '';
+
             const props = geojson.properties || {};
 
             // ---- Footer: MHW / MNW aus dem JSON ----
+            // Link zur offiziellen BSH-Seite des Pegels (nur https-Links von bsh.de übernehmen)
+            const bshUrl = String(props.bsh_url_waterlevel || '');
+            const bshOk = /^https:\/\/([a-z0-9-]+\.)*bsh\.de(\/|$)/i.test(bshUrl);
+            document.getElementById('bsh-link').href = bshOk ? bshUrl : '#';
+            document.getElementById('bsh-link-row').hidden = !bshOk;
+
             const mhw = props.mean_high_water;
             const mnw = props.mean_low_water;
             // Nur anzeigen, was im JSON steht
@@ -471,6 +480,11 @@
 
     renderButtons();
     selectStation(location.hash.slice(1) || DEFAULT_STATION);
+    // Ort auch wechseln, wenn nur der #-Teil der Adresse geändert wird
+    window.addEventListener('hashchange', () => {
+        const id = location.hash.slice(1) || DEFAULT_STATION;
+        if (!currentStation || currentStation.id !== id) selectStation(id);
+    });
 
     // Automatisch aktualisieren: regelmäßig und wenn die Seite wieder geöffnet wird
     // (z. B. Handy entsperrt oder zurück zum Browser-Tab)
