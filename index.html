@@ -221,6 +221,10 @@
         { id: 'dagebuell',      short: 'Dagebüll',     name: 'Dagebüll' },
     ];
     const DEFAULT_STATION = 'hooge_anleger';
+    // Abweichung nur aus dem JSON: erst die offizielle BSH-Angabe,
+    // dann die BSH-Modellvarianten r0, r1, … r5 – der erste vorhandene Wert wird gezeigt
+    const DEVIATION_KEYS = ['forecast_deviation',
+        ...[0, 1, 2, 3, 4, 5].map(r => `mos_forecast_r${r}_deviation`)];
     let currentStation = null;
     let requestCounter = 0;
     let lastLoaded = 0;
@@ -439,7 +443,7 @@
                     + (phaseText ? `<span class="phase">${phaseText}</span>` : '');
 
                 // Abweichung: offizielle BSH-Abweichung, sonst MOS-Modell
-                const dev = fmtDeviation(item.forecast_deviation ?? item.mos_forecast_r0_deviation);
+                const dev = fmtDeviation(pick(item, DEVIATION_KEYS));
 
                 const tr = document.createElement('tr');
                 tr.className = 'ev' + (d < now ? ' past' : '') + (dev.max >= 1 ? ' high' : '');
