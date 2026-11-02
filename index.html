@@ -6,14 +6,14 @@
     <title>Wasserstandsvorhersage – Hooge Anleger</title>
     <style>
         body {
-            font-family: "Segoe UI", -apple-system, BlinkMacSystemFont, Roboto, Arial, sans-serif;
+            font-family: "Segoe UI", Arial, sans-serif;
             background-color: #f7f9fa;
             color: #1a1a1a;
-            padding: 24px 12px;
+            padding: 20px 10px;
             margin: 0;
         }
         .container {
-            max-width: 850px;
+            max-width: 820px;
             margin: 0 auto;
             background: #ffffff;
             box-shadow: 0 2px 8px rgba(0,0,0,0.08);
@@ -30,11 +30,11 @@
             background-color: #005a8c;
             color: #ffffff;
             font-weight: 600;
-            padding: 12px 16px;
+            padding: 12px 14px;
             border-bottom: 2px solid #003e61;
         }
         tbody td {
-            padding: 10px 16px;
+            padding: 9px 14px;
             border-bottom: 1px solid #edf1f5;
         }
         tbody tr:nth-child(even) {
@@ -47,29 +47,16 @@
             font-weight: 500;
             white-space: nowrap;
         }
-        .event-hw, .event-nw {
-            color: #111;
-        }
         .phase-np {
             color: #d18239;
             font-weight: 500;
         }
-        .deviation {
-            font-variant-numeric: tabular-nums;
-            white-space: nowrap;
-        }
-        .status-cell {
-            text-align: center;
-            padding: 30px;
-            color: #666;
-        }
         .reference-footer {
             background-color: #005a8c;
             color: #ffffff;
-            padding: 14px 18px;
-            font-size: 15px;
+            padding: 12px 16px;
+            font-size: 14px;
             line-height: 1.6;
-            border-top: 1px solid #00446b;
         }
         .reference-footer span.label {
             font-weight: bold;
@@ -93,13 +80,11 @@
             </tr>
         </thead>
         <tbody id="forecast-body">
-            <tr>
-                <td colspan="6" class="status-cell">Lade Vorhersagedaten des BSH...</td>
-            </tr>
+            <tr><td colspan="6" style="text-align:center; padding: 20px;">Lade Daten...</td></tr>
         </tbody>
     </table>
 
-    <div class="reference-footer" id="reference-values">
+    <div class="reference-footer">
         <div><span class="label">MHW:</span> <span id="mhw-value">6,45 m über PNP</span></div>
         <div><span class="label">MNW:</span> <span id="mnw-value">3,59 m über PNP</span></div>
     </div>
@@ -108,82 +93,30 @@
 <script>
     const apiUrl = 'https://gdi.bsh.de/ldproxy/rest/services/WaterLevelForecast/collections/waterlevelforecastdata/items/hooge_anleger?lang=en&f=json';
 
-    // Formatiert die Abweichung unabhängig davon, ob das BSH Zahlen, Strings oder Spannen liefert
-    function parseDeviation(item) {
-        // Prioritätenliste der API-Felder für Abweichungen
-        const raw = item.forecast_deviation 
-                 ?? item.deviation 
-                 ?? item.mos_forecast_r0_deviation 
-                 ?? item.mos_forecast_deviation;
-
-        if (raw === null || raw === undefined || raw === '') {
-            return '-';
-        }
-
-        // Falls das BSH einen String liefert (z. B. "-0,5 bis -0,75 m" oder "-0.2 m")
-        if (typeof raw === 'string') {
-            let str = raw.trim();
-            if (str === '' || str === '-') return '-';
-            if (str.endsWith('m')) return str;
-            return `${str.replace('.', ',')} m`;
-        }
-
-        // Falls das BSH eine Zahl liefert (z. B. -0.2)
-        if (typeof raw === 'number') {
-            const sign = raw > 0 ? '+' : '';
-            return `${sign}${raw.toFixed(1).replace('.', ',')} m`;
-        }
-
-        return '-';
-    }
-
     async function loadForecast() {
         const tbody = document.getElementById('forecast-body');
 
         try {
             const response = await fetch(apiUrl);
-            if (!response.ok) throw new Error(`HTTP-Fehler ${response.status}`);
-            
             const geojson = await response.json();
             const props = geojson.properties || {};
 
-            // MHW / MNW Metadaten aktualisieren
-            const mhwRaw = props.mean_high_water ?? props.mhw ?? props.mean_high_water_level;
-            const mnwRaw = props.mean_low_water ?? props.mnw ?? props.mean_low_water_level;
+            // MHW / MNW Werte aktualisieren, falls im Objekt vorhanden
+            if (props.mean_high_water) document.getElementById('mhw-value').textContent = (props.mean_high_water / 100).toFixed(2).replace('.', ',') + ' m über PNP';
+            if (props.mean_low_water) document.getElementById('mnw-value').textContent = (props.mean_low_water / 100).toFixed(2).replace('.', ',') + ' m über PNP';
 
-            if (mhwRaw != null) {
-                const mhwVal = mhwRaw > 50 ? (mhwRaw / 100).toFixed(2) : Number(mhwRaw).toFixed(2);
-                document.getElementById('mhw-value').textContent = `${mhwVal.replace('.', ',')} m über PNP`;
-            }
-            if (mnwRaw != null) {
-                const mnwVal = mnwRaw > 50 ? (mnwRaw / 100).toFixed(2) : Number(mnwRaw).toFixed(2);
-                document.getElementById('mnw-value').textContent = `${mnwVal.replace('.', ',')} m über PNP`;
-            }
-            
             const events = props.high_water_low_water || [];
             const chartDatum = props.chartdatum_relative_to_gaugezero || 0;
 
-            if (!Array.isArray(events) || events.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="6" class="status-cell">Keine Vorhersagewerte im Datensatz vorhanden.</td></tr>';
-                return;
-            }
-
-            // Zeitfenster: Ab heute 00:00 Uhr bis in 3 Tagen 23:59 Uhr
+            // Zeitfenster: Ab sofort bis in 3 Tagen
             const now = new Date();
-            const startLimit = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
-            const endLimit = new Date(startLimit);
-            endLimit.setDate(startLimit.getDate() + 3);
-            endLimit.setHours(23, 59, 59, 999);
+            const endLimit = new Date();
+            endLimit.setDate(now.getDate() + 3);
 
             const filteredEvents = events.filter(item => {
                 const ts = new Date(item.event_timestamp);
-                return ts >= startLimit && ts <= endLimit;
+                return ts >= now && ts <= endLimit;
             });
-
-            if (filteredEvents.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="6" class="status-cell">Keine Ereignisse für die nächsten 3 Tage ermittelt.</td></tr>';
-                return;
-            }
 
             tbody.innerHTML = '';
             let lastDayKey = '';
@@ -191,51 +124,38 @@
             filteredEvents.forEach(item => {
                 const dateObj = new Date(item.event_timestamp);
 
-                // Datums- und Uhrzeitformat
                 const weekdays = ['So.', 'Mo.', 'Di.', 'Mi.', 'Do.', 'Fr.', 'Sa.'];
-                const dayName = weekdays[dateObj.getDay()];
-                const day = String(dateObj.getDate()).padStart(2, '0');
-                const month = String(dateObj.getMonth() + 1).padStart(2, '0');
-                const year = dateObj.getFullYear();
-                const dateLabel = `${dayName}, ${day}.${month}.${year}`;
+                const dayLabel = `${weekdays[dateObj.getDay()]}, ${String(dateObj.getDate()).padStart(2, '0')}.${String(dateObj.getMonth() + 1).padStart(2, '0')}.${dateObj.getFullYear()}`;
+                const timeLabel = `${String(dateObj.getHours()).padStart(2, '0')}:${String(dateObj.getMinutes()).padStart(2, '0')}`;
 
-                const hours = String(dateObj.getHours()).padStart(2, '0');
-                const minutes = String(dateObj.getMinutes()).padStart(2, '0');
-                const timeLabel = `${hours}:${minutes}`;
-
-                // Tidenhöhe über SKN in Metern berechnen
+                // Tidenhöhe in Metern über SKN
                 let heightFormatted = '-';
-                const rawValue = item.tidal_prediction_value ?? item.forecast_value;
-                if (rawValue != null) {
-                    let cmOverSkn = rawValue;
-                    if (chartDatum > 0 && rawValue > chartDatum) {
-                        cmOverSkn = rawValue - chartDatum;
-                    }
-                    heightFormatted = (cmOverSkn / 100).toFixed(2).replace('.', ',');
+                const rawHeight = item.forecast_value ?? item.tidal_prediction_value;
+                if (rawHeight != null) {
+                    const sknVal = chartDatum > 0 ? (rawHeight - chartDatum) : rawHeight;
+                    heightFormatted = (sknVal / 100).toFixed(2).replace('.', ',');
                 }
 
-                // Ereignisdarstellung mit Pfeil
-                let eventDisplay = item.event || '';
-                if (item.event === 'HW') {
-                    eventDisplay = '<span class="event-hw">↑ HW</span>';
-                } else if (item.event === 'NW') {
-                    eventDisplay = '<span class="event-nw">↓ NW</span>';
+                // Ereignis mit Pfeil
+                const arrow = item.event === 'HW' ? '↑ HW' : (item.event === 'NW' ? '↓ NW' : (item.event || ''));
+
+                // ABWEICHUNG DIREKT ÜBERNEHMEN:
+                // Nimmt zuerst die offizielle BSH-Abweichung; falls null, das MOS-Modell r0
+                let rawDeviation = item.forecast_deviation ?? item.mos_forecast_r0_deviation;
+                let deviationText = '-';
+
+                if (rawDeviation !== null && rawDeviation !== undefined) {
+                    deviationText = String(rawDeviation) + ' m';
                 }
 
-                // Phase
-                const phaseDisplay = item.phase || item.tidal_phase || 'Np';
-
-                // Abweichung robust parsen
-                const devDisplay = parseDeviation(item);
-
-                // Zeile erzeugen
+                // Zeile zusammenbauen
                 const tr = document.createElement('tr');
-                const isNewDay = dateLabel !== lastDayKey;
+                const isNewDay = dayLabel !== lastDayKey;
 
                 if (isNewDay) {
                     if (lastDayKey !== '') tr.classList.add('day-border');
-                    tr.innerHTML += `<td class="date-col">${dateLabel}</td>`;
-                    lastDayKey = dateLabel;
+                    tr.innerHTML += `<td class="date-col">${dayLabel}</td>`;
+                    lastDayKey = dayLabel;
                 } else {
                     tr.innerHTML += `<td class="date-col"></td>`;
                 }
@@ -243,17 +163,16 @@
                 tr.innerHTML += `
                     <td>${timeLabel}</td>
                     <td>${heightFormatted}</td>
-                    <td>${eventDisplay}</td>
-                    <td class="phase-np">${phaseDisplay}</td>
-                    <td class="deviation">${devDisplay}</td>
+                    <td>${arrow}</td>
+                    <td class="phase-np">Np</td>
+                    <td>${deviationText}</td>
                 `;
 
                 tbody.appendChild(tr);
             });
 
         } catch (error) {
-            console.error('Fehler bei der Datenverarbeitung:', error);
-            tbody.innerHTML = `<tr><td colspan="6" class="status-cell" style="color: #b00020;">Fehler beim Laden der BSH-Daten: ${error.message}</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; color:red; padding:20px;">Fehler: ${error.message}</td></tr>`;
         }
     }
 
