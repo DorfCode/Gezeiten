@@ -221,8 +221,10 @@
         { id: 'dagebuell',      short: 'Dagebüll',     name: 'Dagebüll' },
     ];
     const DEFAULT_STATION = 'hooge_anleger';
-    // Abweichung nur aus dem JSON: erst die offizielle BSH-Angabe,
-    // dann die BSH-Modellvarianten r0, r1, … r5 – der erste vorhandene Wert wird gezeigt
+    // Abweichung nur aus dem JSON: erst die offizielle BSH-Angabe (forecast_deviation),
+    // dann das MOS-Hauptsystem r0, dann die MOS-Ersatzsysteme r1 … r5.
+    // Laut BSH-Doku (parameter_documentation.pdf, Tab. 3) springen r1–r5 ein, wenn r0 wegen
+    // fehlender Eingangsdaten keine Vorhersage liefert. Der erste vorhandene Wert wird gezeigt.
     const DEVIATION_KEYS = ['forecast_deviation',
         ...[0, 1, 2, 3, 4, 5].map(r => `mos_forecast_r${r}_deviation`)];
     let currentStation = null;
@@ -374,9 +376,14 @@
             document.getElementById('mnw-row').hidden = mnw == null;
 
             // ---- Vorhersagetext der BSH ----
-            const texts = [props.forecast_text, props.information_text]
+            // Laut BSH-Doku: forecast_text (offizielle Vorhersage), forecast_text_additional
+            // (Vorabinfo zur Entwicklung), information (Betriebshinweise, z. B. Störungen).
+            // information_text ist der Name, der tatsächlich im JSON vorkommt.
+            const texts = [props.forecast_text, props.forecast_text_additional,
+                           props.information, props.information_text]
                 .map(t => t && typeof t === 'object' ? t.de : t)
-                .filter(t => t && String(t).trim() !== '');
+                .filter(t => t && String(t).trim() !== '')
+                .filter((t, i, all) => all.indexOf(t) === i);   // doppelte Texte nur einmal
             if (texts.length) {
                 textBox.innerHTML = texts.map(t => `<p>${safeBsHtml(t)}</p>`).join('');
                 textBox.hidden = false;
