@@ -145,7 +145,7 @@
         .tide .arrow { display: inline-block; width: 1.4em; font-size: 18px; font-weight: 700; }
         .tide .phase { font-size: 14px; font-weight: 600; }
         tr.past td { opacity: 0.45; }
-        /* Abweichung über +1 m: ganze Zeile markieren */
+        /* Abweichung ab +1 m: ganze Zeile markieren */
         tr.ev.high td { background-color: var(--high); font-weight: 700; }
         .msg { text-align: center; padding: 24px 10px; color: var(--muted); white-space: normal; }
         .msg.err { color: var(--error); }
@@ -206,7 +206,7 @@
             <b>↑</b> Hochwasser · <b>↓</b> Niedrigwasser<br>
             Nipp/Spring = Nipp-/Springzeit (aus der Mondphase berechnet)<br>
             Abw. = Abweichung vom mittleren Hoch-/Niedrigwasser (MHW/MNW) · – = keine Vorhersage der BSH<br>
-            <span class="legend-high">&nbsp;Markiert&nbsp;</span> = mehr als 1 m über dem Mittel<br>
+            <span class="legend-high">&nbsp;Markiert&nbsp;</span> = 1 m oder mehr über dem Mittel<br>
             <span id="station-note"></span>
             Quelle: <a href="https://www.bsh.de" target="_blank" rel="noopener">Bundesamt für Seeschifffahrt und Hydrographie</a>
         </div>
@@ -431,7 +431,7 @@
                 const dev = fmtDeviation(item.forecast_deviation ?? item.mos_forecast_r0_deviation);
 
                 const tr = document.createElement('tr');
-                tr.className = 'ev' + (d < now ? ' past' : '') + (dev.max > 1 ? ' high' : '');
+                tr.className = 'ev' + (d < now ? ' past' : '') + (dev.max >= 1 ? ' high' : '');
                 tr.innerHTML = `
                     <td class="time">${pad(d.getHours())}:${pad(d.getMinutes())}</td>
                     <td class="tide" title="${ev}">${tideHtml}</td>
