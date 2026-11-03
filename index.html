@@ -30,7 +30,10 @@
             --line: #edf1f5;
             --stripe: #f4f8fb;
             --error: #c0392b;
-            --high: #ffd8a8;
+            /* Sturmflut-Stufen (BSH, Nordsee, Hochwasser über MHW) */
+            --sf1: #fff176;   /* Sturmflut ab +1,5 m: gelb */
+            --sf2: #ffb300;   /* schwere Sturmflut ab +2,5 m: amber */
+            --sf3: #e53935;   /* sehr schwere Sturmflut ab +3,5 m: rot */
         }
         * { box-sizing: border-box; }
         body {
@@ -175,7 +178,9 @@
         .tide .phase { font-size: 14px; font-weight: 600; }
         tr.past td { opacity: 0.45; }
         /* Abweichung ab +1 m: ganze Zeile markieren */
-        tr.ev.high td { background-color: var(--high); font-weight: 700; }
+        tr.ev.sf1 td { background-color: var(--sf1); font-weight: 700; }
+        tr.ev.sf2 td { background-color: var(--sf2); font-weight: 700; }
+        tr.ev.sf3 td { background-color: var(--sf3); font-weight: 700; color: #fff; }
         .msg { text-align: center; padding: 24px 10px; color: var(--muted); white-space: normal; }
         .msg.err { color: var(--error); }
 
@@ -198,7 +203,10 @@
         }
         .legend a { color: #fff; }
         .legend .version { display: block; text-align: right; opacity: 0.6; font-size: 11px; margin-top: 4px; }
-        .legend-high { background: var(--high); color: var(--text); border-radius: 3px; font-weight: 700; }
+        .sf { display: inline-block; padding: 0 5px; border-radius: 3px; font-weight: 700; color: var(--text); }
+        .sf.sf1 { background: var(--sf1); }
+        .sf.sf2 { background: var(--sf2); }
+        .sf.sf3 { background: var(--sf3); color: #fff; }
 
         /* Als App vom Home-Bildschirm gestartet */
         @media (display-mode: standalone) {
@@ -248,12 +256,15 @@
             <b>↑</b> Hochwasser · <b>↓</b> Niedrigwasser<br>
             Nipp/Spring = Nipp-/Springzeit (aus der Mondphase berechnet)<br>
             Abw. = Abweichung vom mittleren Hoch-/Niedrigwasser (MHW/MNW) · – = keine Vorhersage der BSH<br>
-            <span class="legend-high">&nbsp;Markiert&nbsp;</span> = 1 m oder mehr über dem Mittel<br>
+            Hochwasser über MHW (BSH-Einstufung):
+            <span class="sf sf1">Sturmflut ab +1,5</span>
+            <span class="sf sf2">schwer ab +2,5</span>
+            <span class="sf sf3">sehr schwer ab +3,5</span><br>
             <span id="station-note"></span>
             Quelle: <a href="https://www.bsh.de" target="_blank" rel="noopener">Bundesamt für Seeschifffahrt und Hydrographie</a>
             <span id="bsh-link-row" hidden><br>Maßgeblich ist die
                 <a id="bsh-link" href="#" target="_blank" rel="noopener">offizielle BSH-Vorhersage für diesen Ort</a></span>
-            <span class="version">Seitenversion 2026-11-02 b</span>
+            <span class="version">Seitenversion 2026-11-03 a</span>
         </div>
     </footer>
 </div>
@@ -339,6 +350,17 @@
     }
 
     // Abweichung kommt als Text, z. B. "-0,1 m", "-0,5 bis -0,75 m", "+/-0,0 m"
+    // Sturmflut-Einstufung der BSH für die Nordsee (parameter_documentation.pdf, Tab. 5):
+    // bezogen auf das mittlere Hochwasser (MHW), gilt daher nur für Hochwasser-Zeilen.
+    // Maßgeblich ist der höchste Wert der BSH-Angabe (bei Bereichen die Obergrenze).
+    function surgeClass(ev, max) {
+        if (ev !== 'HW' || !isFinite(max)) return '';
+        if (max >= 3.5) return ' sf3';
+        if (max >= 2.5) return ' sf2';
+        if (max >= 1.5) return ' sf1';
+        return '';
+    }
+
     function fmtDeviation(raw) {
         if (raw === null || raw === undefined || raw === '') return { text: '–', cls: '' };
         const text = String(raw)
@@ -505,7 +527,7 @@
                 const dev = fmtDeviation(pick(item, DEVIATION_KEYS));
 
                 const tr = document.createElement('tr');
-                tr.className = 'ev' + (d < now ? ' past' : '') + (dev.max >= 1 ? ' high' : '');
+                tr.className = 'ev' + (d < now ? ' past' : '') + surgeClass(ev, dev.max);
                 tr.innerHTML = `
                     <td class="time">${pad(d.getHours())}:${pad(d.getMinutes())}</td>
                     <td class="tide" title="${ev}">${tideHtml}</td>
