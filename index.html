@@ -174,8 +174,23 @@
         tr.ev:nth-child(even) td { background-color: var(--stripe); }
         .time { font-weight: 600; }
         tbody td.tide, thead th.tide { text-align: left; padding-left: 16%; }
-        .tide .arrow { display: inline-block; width: 1.4em; font-size: 18px; font-weight: 700; }
-        .tide .phase { font-size: 14px; font-weight: 600; }
+        /* Plakette HW / NW: HW dunkel gefüllt, NW hell umrandet */
+        .pill {
+            display: inline-block;
+            min-width: 2.6em;
+            padding: 3px 8px;
+            border-radius: 999px;
+            font-size: 13px;
+            font-weight: 700;
+            line-height: 1.2;
+            text-align: center;
+            vertical-align: middle;
+        }
+        .pill.hw { background: var(--blue-dark); color: #fff; }
+        .pill.nw { background: #fff; color: var(--blue-dark); box-shadow: inset 0 0 0 2px #8fb8d2; }
+        .tide .phase { font-size: 14px; font-weight: 600; margin-left: 6px; vertical-align: middle; }
+        .legend .pill { font-size: 11px; padding: 1px 6px; }
+        .legend .pill.hw { box-shadow: inset 0 0 0 1.5px #fff; }
         tr.past td { opacity: 0.45; }
         /* Abweichung ab +1 m: ganze Zeile markieren */
         tr.ev.sf1 td { background-color: var(--sf1); font-weight: 700; }
@@ -237,7 +252,7 @@
         <thead>
             <tr>
                 <th>Zeit</th>
-                <th class="tide" title="↑ Hochwasser / ↓ Niedrigwasser">Tide</th>
+                <th class="tide" title="HW = Hochwasser / NW = Niedrigwasser">Tide</th>
                 <th title="Abweichung vom mittleren Hoch-/Niedrigwasser">Abw.&nbsp;[m]</th>
             </tr>
         </thead>
@@ -252,7 +267,7 @@
             <div id="mnw-row"><span class="label">MNW:</span><span id="mnw-value">–</span></div>
         </div>
         <div class="legend">
-            <b>↑</b> Hochwasser · <b>↓</b> Niedrigwasser<br>
+            <span class="pill hw">HW</span> Hochwasser · <span class="pill nw">NW</span> Niedrigwasser<br>
             Nipp/Spring = Nipp-/Springzeit (aus der Mondphase berechnet)<br>
             Abw. = Abweichung vom mittleren Hoch-/Niedrigwasser (MHW/MNW) · – = keine Vorhersage der BSH<br>
             Hochwasser über MHW (BSH-Einstufung):
@@ -517,9 +532,10 @@
                 const ev = String(item.event || '').toUpperCase();
                 const phase = springNeap(d);
                 const phaseText = phase === 'Sp' ? 'Spring' : (phase === 'Np' ? 'Nipp' : '');
-                const arrow = ev === 'HW' ? '↑' : (ev === 'NW' ? '↓' : (ev || '–'));
-                const tideHtml = `<span class="arrow">${arrow}</span>`
-                    + (phaseText ? `<span class="phase">${phaseText}</span>` : '');
+                const pill = ev === 'HW' ? '<span class="pill hw">HW</span>'
+                           : ev === 'NW' ? '<span class="pill nw">NW</span>'
+                           : (ev || '–');
+                const tideHtml = pill + (phaseText ? `<span class="phase">${phaseText}</span>` : '');
 
                 // Abweichung: offizielle BSH-Abweichung, sonst MOS-Modell
                 const dev = fmtDeviation(pick(item, DEVIATION_KEYS));
@@ -528,7 +544,7 @@
                 tr.className = 'ev' + (d < now ? ' past' : '') + surgeClass(ev, dev.max);
                 tr.innerHTML = `
                     <td class="time">${pad(d.getHours())}:${pad(d.getMinutes())}</td>
-                    <td class="tide" title="${ev}">${tideHtml}</td>
+                    <td class="tide" title="${ev === 'HW' ? 'Hochwasser' : ev === 'NW' ? 'Niedrigwasser' : ev}">${tideHtml}</td>
                     <td class="dev">${dev.text}</td>
                 `;
                 tbody.appendChild(tr);
