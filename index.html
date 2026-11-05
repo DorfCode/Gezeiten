@@ -153,6 +153,7 @@
             font-size: 13px;
             padding: 8px 10px;
             text-align: center;
+            z-index: 3;
         }
         thead th:first-child { text-align: left; }
         tbody td {
@@ -162,14 +163,19 @@
             white-space: nowrap;
         }
         tbody td:first-child { text-align: left; }
+        /* Datumszeile: blauer Balken, bleibt beim Scrollen unter dem Tabellenkopf stehen */
         tr.day td {
-            background: #d3e5f1;
-            color: var(--blue-dark);
+            position: sticky;
+            top: calc(env(safe-area-inset-top, 0px) + var(--thead-h, 33px));
+            z-index: 2;
+            background: var(--blue);
+            color: #fff;
             font-weight: 700;
-            font-size: 14px;
-            padding: 7px 10px;
+            font-size: 15px;
+            padding: 8px 12px;
             text-align: left;
-            border-bottom: 1px solid #b7d2e5;
+            border: none;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.15);
         }
         tr.ev.hw td { background-color: var(--stripe); }
         .time { font-weight: 600; }
@@ -552,6 +558,14 @@
             tbody.innerHTML = `<tr><td colspan="3" class="msg err">Fehler beim Laden: ${error.message}</td></tr>`;
         }
     }
+
+    // Höhe des Tabellenkopfs merken, damit die Datumszeile direkt darunter haften bleibt
+    function updateTheadHeight() {
+        const th = document.querySelector('#forecast-table thead');
+        if (th) document.documentElement.style.setProperty('--thead-h', th.offsetHeight + 'px');
+    }
+    updateTheadHeight();
+    window.addEventListener('resize', updateTheadHeight);
 
     renderButtons();
     selectStation(location.hash.slice(1) || DEFAULT_STATION);
