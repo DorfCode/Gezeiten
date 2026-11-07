@@ -467,10 +467,9 @@
         const myWind = ++windCounter;
         if (!silent) { box.hidden = true; box.innerHTML = ''; }
         try {
-            // Zeitpunkte: ab der nächsten vollen Stunde alle 2 Stunden, 12 Stunden lang
+            // Zeitpunkte: ab der aktuellen vollen Stunde (20:28 -> 20 Uhr) alle 2 Stunden, 12 Stunden lang
             const start = new Date();
             start.setMinutes(0, 0, 0);
-            start.setHours(start.getHours() + 1);
             const times = [];
             for (let h = 0; h <= WIND_HOURS; h += WIND_STEP) times.push(start.getTime() + h * 3600e3);
             const last = new Date(times[times.length - 1] + 3600e3);
@@ -483,11 +482,14 @@
             const data = await res.json();
             if (myWind !== windCounter) return;   // inzwischen anderer Ort gewählt
 
-            const byTime = new Map((data.weather || []).map(w => [Date.parse(w.timestamp), w]));
+            // Nur Vorhersagewerte (DWD MOSMIX) verwenden: für vergangene Stunden kann Bright Sky
+            // sonst Messwerte einer anderen Station liefern
+            const sources = new Map((data.sources || []).map(s => [s.id, s]));
+            const isForecast = w => (sources.get(w.source_id) || {}).observation_type === 'forecast';
+            const byTime = new Map((data.weather || []).filter(isForecast).map(w => [Date.parse(w.timestamp), w]));
             const points = times.map(t => byTime.get(t)).filter(w => w && w.wind_speed != null);
             if (!points.length) throw new Error('keine Winddaten');
 
-            const sources = new Map((data.sources || []).map(s => [s.id, s]));
             const src = sources.get(points[0].source_id);
             const stationName = src && src.station_name ? titleCase(src.station_name) : '';
 
