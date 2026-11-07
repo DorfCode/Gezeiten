@@ -498,7 +498,7 @@
                     + `<div class="a">${w.wind_direction != null ? windArrow(w.wind_direction) : ''}</div>`
                     + `<div class="v">${bft ?? '–'}</div><div class="g">${gust ?? '–'}</div></div>`;
             };
-            box.innerHTML = `<div class="title">Wind nächste 12 h · DWD${stationName ? ' ' + stationName : ''}</div>`
+            box.innerHTML = `<div class="title">Wind · DWD${stationName ? ' ' + stationName : ''} · ${WIND_HOURS} h</div>`
                 + `<div class="grid"><div class="lab"><div class="h">Uhr</div><div class="a"></div>`
                 + `<div class="v">Bft</div><div class="g">Böen</div></div>`
                 + points.map(cell).join('') + `</div>`;
