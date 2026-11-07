@@ -137,6 +137,29 @@
         .forecast-text p + p { margin-top: 6px; }
         .forecast-text[hidden] { display: none; }
 
+        /* Wind-Vorhersage (DWD MOSMIX über Bright Sky) */
+        .wind {
+            background: var(--blue);
+            color: #fff;
+            padding: 8px 10px 10px;
+            border-top: 1px solid rgba(255,255,255,0.2);
+        }
+        .wind[hidden] { display: none; }
+        .wind .title { font-size: 12px; opacity: 0.85; margin: 0 2px 6px; }
+        .wind .grid {
+            display: grid;
+            grid-template-columns: auto repeat(7, 1fr);
+            gap: 2px;
+            text-align: center;
+            align-items: center;
+        }
+        .wind .lab { text-align: left; padding-right: 4px; opacity: 0.65; }
+        .wind .h { font-size: 11px; opacity: 0.8; height: 15px; }
+        .wind .a { height: 22px; display: flex; align-items: center; justify-content: center; }
+        .wind .v { font-size: 16px; font-weight: 700; height: 20px; line-height: 20px; }
+        .wind .g { font-size: 11px; opacity: 0.75; height: 15px; }
+        .wind .lab .v { font-size: 11px; font-weight: 400; }
+
         /* Tabelle */
         table {
             width: 100%;
@@ -237,6 +260,7 @@
         <div class="meta" id="meta">&nbsp;</div>
     </header>
 
+    <div class="wind" id="wind" hidden></div>
     <div class="forecast-text" id="forecast-text" hidden></div>
 
     <table id="forecast-table">
@@ -267,7 +291,10 @@
             <span class="sf sf2">schwer ab +2,5</span>
             <span class="sf sf3">sehr schwer ab +3,5</span><br>
             <span id="station-note"></span>
+            Wind in Beaufort (Bft), umgerechnet aus km/h · Pfeil = Windrichtung (wohin der Wind weht)<br>
             Quelle: <a href="https://www.bsh.de" target="_blank" rel="noopener">Bundesamt für Seeschifffahrt und Hydrographie</a>
+            · Wind: <a href="https://www.dwd.de" target="_blank" rel="noopener">Deutscher Wetterdienst</a>
+            über <a href="https://brightsky.dev" target="_blank" rel="noopener">Bright Sky</a>
             <span id="bsh-link-row" hidden><br>Maßgeblich ist die
                 <a id="bsh-link" href="#" target="_blank" rel="noopener">offizielle BSH-Vorhersage für diesen Ort</a></span>
         </div>
@@ -277,9 +304,9 @@
 <script>
     const API_BASE = 'https://gdi.bsh.de/ldproxy/rest/services/WaterLevelForecast/collections/waterlevelforecastdata/items/';
     const STATIONS = [
-        { id: 'wittduen_hafen', short: 'Wittdün',      name: 'Wittdün Hafen' },
-        { id: 'hooge_anleger',  short: 'Hooge',        name: 'Hooge Anleger' },
-        { id: 'dagebuell',      short: 'Dagebüll',     name: 'Dagebüll' },
+        { id: 'wittduen_hafen', short: 'Wittdün',  name: 'Wittdün Hafen', lat: 54.631667, lon: 8.383889 },
+        { id: 'hooge_anleger',  short: 'Hooge',    name: 'Hooge Anleger', lat: 54.578611, lon: 8.556389 },
+        { id: 'dagebuell',      short: 'Dagebüll', name: 'Dagebüll',      lat: 54.730556, lon: 8.686944 },
     ];
     const DEFAULT_STATION = 'hooge_anleger';
 
@@ -414,8 +441,76 @@
         loadForecast(station);
     }
 
+    // ---- Wind-Vorhersage: DWD MOSMIX über Bright Sky ----
+    const WIND_API = 'https://api.brightsky.dev/weather';
+    const WIND_HOURS = 12, WIND_STEP = 2;
+    let windCounter = 0;
+
+    // Beaufort-Skala (WMO), Obergrenzen in m/s für Stufe 0 … 11; darüber 12
+    const BFT_MAX_MS = [0.2, 1.5, 3.3, 5.4, 7.9, 10.7, 13.8, 17.1, 20.7, 24.4, 28.4, 32.6];
+    function beaufort(kmh) {
+        const ms = Number(kmh) / 3.6;
+        if (!isFinite(ms)) return null;
+        const i = BFT_MAX_MS.findIndex(max => ms <= max);
+        return i === -1 ? 12 : i;
+    }
+
+    // "HALLIG HOOGE" -> "Hallig Hooge"
+    const titleCase = t => String(t).toLowerCase().replace(/(^|[\s\-\/(])(\p{L})/gu, (m, a, b) => a + b.toUpperCase());
+
+    const windArrow = deg => `<svg width="18" height="18" viewBox="0 0 24 24" style="transform:rotate(${(Number(deg) + 180) % 360}deg)" aria-hidden="true"><path d="M12 3 L18 15 H13 V21 H11 V15 H6z" fill="currentColor"/></svg>`;
+
+    async function loadWind(station, silent = false) {
+        const box = document.getElementById('wind');
+        const myWind = ++windCounter;
+        if (!silent) { box.hidden = true; box.innerHTML = ''; }
+        try {
+            // Zeitpunkte: ab der nächsten vollen Stunde alle 2 Stunden, 12 Stunden lang
+            const start = new Date();
+            start.setMinutes(0, 0, 0);
+            start.setHours(start.getHours() + 1);
+            const times = [];
+            for (let h = 0; h <= WIND_HOURS; h += WIND_STEP) times.push(start.getTime() + h * 3600e3);
+            const last = new Date(times[times.length - 1] + 3600e3);
+
+            const url = `${WIND_API}?lat=${station.lat}&lon=${station.lon}`
+                + `&date=${encodeURIComponent(start.toISOString())}&last_date=${encodeURIComponent(last.toISOString())}`
+                + `&tz=Europe/Berlin`;
+            const res = await fetch(url, { cache: 'no-store' });
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const data = await res.json();
+            if (myWind !== windCounter) return;   // inzwischen anderer Ort gewählt
+
+            const byTime = new Map((data.weather || []).map(w => [Date.parse(w.timestamp), w]));
+            const points = times.map(t => byTime.get(t)).filter(w => w && w.wind_speed != null);
+            if (!points.length) throw new Error('keine Winddaten');
+
+            const sources = new Map((data.sources || []).map(s => [s.id, s]));
+            const src = sources.get(points[0].source_id);
+            const stationName = src && src.station_name ? titleCase(src.station_name) : '';
+
+            const cell = w => {
+                const d = new Date(Date.parse(w.timestamp));
+                const bft = beaufort(w.wind_speed), gust = beaufort(w.wind_gust_speed);
+                return `<div><div class="h">${pad(d.getHours())}</div>`
+                    + `<div class="a">${w.wind_direction != null ? windArrow(w.wind_direction) : ''}</div>`
+                    + `<div class="v">${bft ?? '–'}</div><div class="g">${gust ?? '–'}</div></div>`;
+            };
+            box.innerHTML = `<div class="title">Wind nächste 12 h · DWD${stationName ? ' ' + stationName : ''}</div>`
+                + `<div class="grid"><div class="lab"><div class="h">Uhr</div><div class="a"></div>`
+                + `<div class="v">Bft</div><div class="g">Böen</div></div>`
+                + points.map(cell).join('') + `</div>`;
+            box.hidden = false;
+        } catch (e) {
+            if (myWind !== windCounter) return;
+            // Wind ist eine Zusatzinfo: bei Fehlern ausblenden, die Tidentabelle bleibt unberührt
+            if (!silent) box.hidden = true;
+        }
+    }
+
     // silent = Hintergrund-Aktualisierung: alte Anzeige stehen lassen, bis neue Daten da sind
     async function loadForecast(station, silent = false) {
+        loadWind(station, silent);
         const tbody = document.getElementById('forecast-body');
         const textBox = document.getElementById('forecast-text');
         const myRequest = ++requestCounter;
@@ -461,12 +556,10 @@
             document.getElementById('mhw-row').hidden = mhw == null;
             document.getElementById('mnw-row').hidden = mnw == null;
 
-            // ---- Vorhersagetext der BSH ----
-            // Laut BSH-Doku: forecast_text (offizielle Vorhersage), forecast_text_additional
-            // (Vorabinfo zur Entwicklung), information (Betriebshinweise, z. B. Störungen).
-            // information_text ist der Name, der tatsächlich im JSON vorkommt.
-            const texts = [props.forecast_text, props.forecast_text_additional,
-                           props.information, props.information_text]
+            // ---- Betriebshinweise der BSH (z. B. technische Störungen) ----
+            // Der Vorhersagetext zum Wasserstand (forecast_text) wird bewusst nicht angezeigt;
+            // an seiner Stelle steht die Wind-Vorhersage. information_text ist der Name im JSON.
+            const texts = [props.information, props.information_text]
                 .map(t => t && typeof t === 'object' ? t.de : t)
                 .filter(t => t && String(t).trim() !== '')
                 .filter((t, i, all) => all.indexOf(t) === i);   // doppelte Texte nur einmal
