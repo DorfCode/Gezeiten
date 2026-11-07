@@ -97,10 +97,11 @@
             cursor: pointer;
             -webkit-tap-highlight-color: transparent;
         }
+        /* Gewählter Ort: wie die anderen Knöpfe, aber dicker weißer Rahmen und leicht aufgehellt */
         .stations button[aria-pressed="true"] {
-            background: #fff;
-            color: var(--blue-dark);
-            border-color: #fff;
+            background: rgba(255,255,255,0.12);
+            color: #fff;
+            border: 2.5px solid #fff;
         }
 
         /* Header */
@@ -255,7 +256,7 @@
     <nav class="stations" id="stations" aria-label="Ort wählen"></nav>
 
     <header>
-        <h1 id="station-title">⚓ Hooge Anleger</h1>
+        <h1 id="station-title">Hooge Anleger</h1>
         <div class="sub">Wasserstandsvorhersage · Daten: BSH</div>
         <div class="meta" id="meta">&nbsp;</div>
     </header>
@@ -433,7 +434,7 @@
         currentStation = station;
         document.querySelectorAll('#stations button').forEach(b =>
             b.setAttribute('aria-pressed', String(b.dataset.id === station.id)));
-        document.getElementById('station-title').textContent = '⚓ ' + station.name;
+        document.getElementById('station-title').textContent = station.name;
         document.title = 'Gezeiten – ' + station.name;
         // Ort in der Adresse merken (teilbarer Link); Standard Hooge ohne Zusatz
         const hash = station.id === DEFAULT_STATION ? '' : '#' + station.id;
