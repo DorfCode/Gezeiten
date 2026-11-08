@@ -162,6 +162,8 @@
         .wind .g { font-size: 11px; opacity: 0.75; height: 15px; }
         .wind .lab .v { font-size: 11px; font-weight: 400; }
         .wind .missing .v { font-weight: 400; opacity: 0.6; }
+        .wind .now { background: rgba(255,255,255,0.14); border-radius: 6px; padding: 2px 0; }
+        .wind .now .h { opacity: 1; font-weight: 700; }
         .wind .missing .g { opacity: 0.5; }
 
         /* Tabelle */
@@ -295,6 +297,7 @@
             <span class="sf sf3">sehr schwer ab +3,5</span><br>
             <span id="station-note"></span>
             Wind in Beaufort (Bft), umgerechnet aus km/h · Pfeil = Windrichtung (wohin der Wind weht)<br>
+            Wind „jetzt“ = Messung der nächsten DWD-Station, übrige Werte = Vorhersage<br>
             Quelle: <a href="https://www.bsh.de" target="_blank" rel="noopener">Bundesamt für Seeschifffahrt und Hydrographie</a>
             · Wind: <a href="https://www.dwd.de" target="_blank" rel="noopener">Deutscher Wetterdienst</a>
             über <a href="https://brightsky.dev" target="_blank" rel="noopener">Bright Sky</a>
@@ -446,6 +449,7 @@
 
     // ---- Wind-Vorhersage: DWD MOSMIX über Bright Sky ----
     const WIND_API = 'https://api.brightsky.dev/weather';
+    const WIND_NOW_API = 'https://api.brightsky.dev/current_weather';   // aktuelle Messung der nächsten DWD-Station
     const WIND_HOURS = 12, WIND_STEP = 2;
     let windCounter = 0;
 
@@ -464,6 +468,33 @@
     // Windpfeil: schmaler Schaft mit kleiner gefüllter Spitze, zeigt, wohin der Wind weht
     const windArrow = deg => `<svg width="20" height="20" viewBox="0 0 24 24" style="transform:rotate(${(Number(deg) + 180) % 360}deg)" aria-hidden="true"><path d="M12 21 V9" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/><path d="M12 3 L16.5 10.5 H7.5z" fill="currentColor"/></svg>`;
 
+    // Aktuelle Messung aus /current_weather: 10-Minuten-Werte, sonst 30/60 Minuten.
+    // Nur verwenden, wenn sie höchstens 90 Minuten alt ist.
+    function parseMeasurement(data) {
+        const w = data && data.weather;
+        if (!w) return null;
+        const first = keys => { for (const k of keys) if (w[k] != null) return [k, w[k]]; return [null, null]; };
+        const [speedKey, speed] = first(['wind_speed_10', 'wind_speed_30', 'wind_speed_60']);
+        if (speed == null) return null;
+        const [, dir] = first(['wind_direction_10', 'wind_direction_30', 'wind_direction_60']);
+        const [, gust] = first(['wind_gust_speed_10', 'wind_gust_speed_30', 'wind_gust_speed_60']);
+        const time = Date.parse(w.timestamp);
+        if (!isFinite(time) || Date.now() - time > 90 * 60e3) return null;
+        const sources = new Map((data.sources || []).map(s => [s.id, s]));
+        const srcId = (w.fallback_source_ids || {})[speedKey] ?? w.source_id;
+        const src = sources.get(srcId);
+        return { speed, dir, gust, time, station: src && src.station_name ? titleCase(src.station_name) : '' };
+    }
+
+    // Erste Spalte "jetzt": Messung, leicht hinterlegt
+    function nowCell(m) {
+        const t = new Date(m.time);
+        const tip = `Messung ${pad(t.getHours())}:${pad(t.getMinutes())} Uhr${m.station ? ', DWD-Station ' + m.station : ''}`;
+        return `<div class="now" title="${tip}"><div class="h">jetzt</div>`
+            + `<div class="a">${m.dir != null ? windArrow(m.dir) : ''}</div>`
+            + `<div class="v">${beaufort(m.speed) ?? '–'}</div><div class="g">${m.gust != null ? beaufort(m.gust) : '–'}</div></div>`;
+    }
+
     async function loadWind(station, silent = false) {
         const box = document.getElementById('wind');
         const myWind = ++windCounter;
@@ -479,9 +510,14 @@
             const url = `${WIND_API}?lat=${station.lat}&lon=${station.lon}`
                 + `&date=${encodeURIComponent(start.toISOString())}&last_date=${encodeURIComponent(last.toISOString())}`
                 + `&tz=Europe/Berlin`;
+            // parallel: aktuelle Messung für die erste Spalte ("jetzt")
+            const nowReq = fetch(`${WIND_NOW_API}?lat=${station.lat}&lon=${station.lon}&tz=Europe/Berlin`, { cache: 'no-store' })
+                .then(r => r.ok ? r.json() : null).catch(() => null);
+
             const res = await fetch(url, { cache: 'no-store' });
             if (!res.ok) throw new Error(`HTTP ${res.status}`);
             const data = await res.json();
+            const measured = parseMeasurement(await nowReq);
             if (myWind !== windCounter) return;   // inzwischen anderer Ort gewählt
 
             // Nur Vorhersagewerte (DWD MOSMIX) verwenden: für vergangene Stunden kann Bright Sky
@@ -495,9 +531,9 @@
                 return w && w.wind_speed != null ? w : null;
             });
             const firstPoint = points.find(w => w);
-            if (!firstPoint) throw new Error('keine Winddaten');
+            if (!firstPoint && !measured) throw new Error('keine Winddaten');
 
-            const src = sources.get(firstPoint.source_id);
+            const src = firstPoint ? sources.get(firstPoint.source_id) : null;
             const stationName = src && src.station_name ? titleCase(src.station_name) : '';
 
             // Fehlender Wert: Uhrzeit bleibt stehen, statt Pfeil und Zahlen ein kleiner Strich
@@ -515,7 +551,8 @@
             box.innerHTML = `<div class="title">Wind · DWD${stationName ? ' ' + stationName : ''} · ${WIND_HOURS} h</div>`
                 + `<div class="grid"><div class="lab"><div class="h">Uhr</div><div class="a"></div>`
                 + `<div class="v">Bft</div><div class="g">Böen</div></div>`
-                + points.map((w, i) => cell(w, times[i])).join('') + `</div>`;
+                + (measured ? nowCell(measured) : cell(points[0], times[0]))
+                + points.slice(1).map((w, i) => cell(w, times[i + 1])).join('') + `</div>`;
             box.hidden = false;
         } catch (e) {
             if (myWind !== windCounter) return;
