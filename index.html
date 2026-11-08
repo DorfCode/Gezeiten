@@ -161,6 +161,8 @@
         .wind .v { font-size: 16px; font-weight: 700; height: 20px; line-height: 20px; }
         .wind .g { font-size: 11px; opacity: 0.75; height: 15px; }
         .wind .lab .v { font-size: 11px; font-weight: 400; }
+        .wind .missing .v { font-weight: 400; opacity: 0.6; }
+        .wind .missing .g { opacity: 0.5; }
 
         /* Tabelle */
         table {
@@ -487,14 +489,24 @@
             const sources = new Map((data.sources || []).map(s => [s.id, s]));
             const isForecast = w => (sources.get(w.source_id) || {}).observation_type === 'forecast';
             const byTime = new Map((data.weather || []).filter(isForecast).map(w => [Date.parse(w.timestamp), w]));
-            const points = times.map(t => byTime.get(t)).filter(w => w && w.wind_speed != null);
-            if (!points.length) throw new Error('keine Winddaten');
+            // Für jeden Zeitpunkt den Vorhersagewert – oder null, wenn er fehlt
+            const points = times.map(t => {
+                const w = byTime.get(t);
+                return w && w.wind_speed != null ? w : null;
+            });
+            const firstPoint = points.find(w => w);
+            if (!firstPoint) throw new Error('keine Winddaten');
 
-            const src = sources.get(points[0].source_id);
+            const src = sources.get(firstPoint.source_id);
             const stationName = src && src.station_name ? titleCase(src.station_name) : '';
 
-            const cell = w => {
-                const d = new Date(Date.parse(w.timestamp));
+            // Fehlender Wert: Uhrzeit bleibt stehen, statt Pfeil und Zahlen ein kleiner Strich
+            const cell = (w, t) => {
+                const d = new Date(t);
+                if (!w) {
+                    return `<div class="missing" title="kein Vorhersagewert"><div class="h">${pad(d.getHours())}</div>`
+                        + `<div class="a"></div><div class="v">–</div><div class="g">–</div></div>`;
+                }
                 const bft = beaufort(w.wind_speed), gust = beaufort(w.wind_gust_speed);
                 return `<div><div class="h">${pad(d.getHours())}</div>`
                     + `<div class="a">${w.wind_direction != null ? windArrow(w.wind_direction) : ''}</div>`
@@ -503,7 +515,7 @@
             box.innerHTML = `<div class="title">Wind · DWD${stationName ? ' ' + stationName : ''} · ${WIND_HOURS} h</div>`
                 + `<div class="grid"><div class="lab"><div class="h">Uhr</div><div class="a"></div>`
                 + `<div class="v">Bft</div><div class="g">Böen</div></div>`
-                + points.map(cell).join('') + `</div>`;
+                + points.map((w, i) => cell(w, times[i])).join('') + `</div>`;
             box.hidden = false;
         } catch (e) {
             if (myWind !== windCounter) return;
