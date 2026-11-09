@@ -302,7 +302,7 @@
             <span id="station-note"></span>
             Wind in Beaufort (Bft), umgerechnet aus km/h · Pfeil = Windrichtung (wohin der Wind weht)<br>
             Wind „jetzt“ = Messung der nächsten DWD-Station, übrige Werte = Vorhersage<br>
-            Regen = Menge in mm (– unter 0,1 mm) und Wahrscheinlichkeit für die 2 Stunden ab der Spaltenzeit (Vorhersage)<br>
+            Regen = mm pro Stunde (– unter 0,1) und Wahrscheinlichkeit pro Stunde, jeweils Mittel der 2 Stunden ab der Spaltenzeit (Vorhersage)<br>
             Quelle: <a href="https://www.bsh.de" target="_blank" rel="noopener">Bundesamt für Seeschifffahrt und Hydrographie</a>
             · Wind: <a href="https://www.dwd.de" target="_blank" rel="noopener">Deutscher Wetterdienst</a>
             über <a href="https://brightsky.dev" target="_blank" rel="noopener">Bright Sky</a>
@@ -538,13 +538,15 @@
             const firstPoint = points.find(w => w);
             if (!firstPoint && !measured) throw new Error('keine Winddaten');
 
-            // Regen für die 2 Stunden ab der Spaltenzeit: Werte von H+1 und H+2 (gelten jeweils für die Stunde davor)
+            // Regen für die 2 Stunden ab der Spaltenzeit: Werte von H+1 und H+2 (gelten jeweils für die Stunde davor).
+            // Angezeigt wird der Mittelwert pro Stunde (mm/h und %), damit die Werte mit den Stundenwerten vergleichbar bleiben.
             const rain = t => {
                 const recs = [byTime.get(t + 3600e3), byTime.get(t + 2 * 3600e3)].filter(Boolean);
                 if (!recs.length) return { mm: null, p: null };
                 const mms = recs.map(r => r.precipitation).filter(v => v != null);
                 const ps = recs.map(r => r.precipitation_probability).filter(v => v != null);
-                return { mm: mms.length ? mms.reduce((a, b) => a + b, 0) : null, p: ps.length ? Math.max(...ps) : null };
+                const mean = a => a.reduce((x, y) => x + y, 0) / a.length;
+                return { mm: mms.length ? mean(mms) : null, p: ps.length ? Math.round(mean(ps)) : null };
             };
             const rainHtml = t => {
                 const r = rain(t);
@@ -570,7 +572,7 @@
             };
             box.innerHTML = `<div class="title">Wind &amp; Regen · DWD${stationName ? ' ' + stationName : ''} · ${WIND_HOURS} h</div>`
                 + `<div class="grid"><div class="lab"><div class="h">Uhr</div><div class="a"></div>`
-                + `<div class="v">Bft</div><div class="g">Böen</div><div class="r">Regen</div><div class="p">mm / %</div></div>`
+                + `<div class="v">Bft</div><div class="g">Böen</div><div class="r">Regen</div><div class="p">mm/h · %</div></div>`
                 + (measured ? nowCell(measured, rainHtml(times[0])) : cell(points[0], times[0]))
                 + points.slice(1).map((w, i) => cell(w, times[i + 1])).join('') + `</div>`;
             box.hidden = false;
