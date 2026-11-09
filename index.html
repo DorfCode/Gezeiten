@@ -302,7 +302,7 @@
             <span id="station-note"></span>
             Wind in Beaufort (Bft), umgerechnet aus km/h · Pfeil = Windrichtung (wohin der Wind weht)<br>
             Wind „jetzt“ = Messung der nächsten DWD-Station, übrige Werte = Vorhersage<br>
-            Regen = mm pro Stunde (– unter 0,1) und Wahrscheinlichkeit pro Stunde, jeweils Mittel der 2 Stunden ab der Spaltenzeit (Vorhersage)<br>
+            Regen = mm pro Stunde und Wahrscheinlichkeit pro Stunde, jeweils Mittel der 2 Stunden ab der Spaltenzeit (Vorhersage); – = unter 0,1 mm/h<br>
             Quelle: <a href="https://www.bsh.de" target="_blank" rel="noopener">Bundesamt für Seeschifffahrt und Hydrographie</a>
             · Wind: <a href="https://www.dwd.de" target="_blank" rel="noopener">Deutscher Wetterdienst</a>
             über <a href="https://brightsky.dev" target="_blank" rel="noopener">Bright Sky</a>
@@ -552,7 +552,9 @@
                 const r = rain(t);
                 const mm = r.mm == null ? '–' : r.mm < 0.1 ? '–' : (r.mm < 10 ? r.mm.toFixed(1).replace('.', ',') : Math.round(r.mm));
                 const wet = r.mm != null && r.mm >= 0.1 ? ' wet' : '';
-                return `<div class="r${wet}">${mm}</div><div class="p">${r.p == null ? '–' : r.p + ' %'}</div>`;
+                // Ohne messbaren Regen (unter 0,1 mm/h) auch keine Prozentangabe
+                const pct = !wet || r.p == null ? '–' : r.p + ' %';
+                return `<div class="r${wet}">${mm}</div><div class="p">${pct}</div>`;
             };
 
             const src = firstPoint ? sources.get(firstPoint.source_id) : null;
