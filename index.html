@@ -220,6 +220,9 @@
         .legend .wave { color: #fff; width: 26px; height: 17px; vertical-align: -3px; }
         tr.past td { opacity: 0.45; }
         /* Abweichung ab +1 m: ganze Zeile markieren */
+        /* Erhöht ab +0,75 m (nur Hochwasser): Wert als gelbe Plakette, Zeile bleibt unverändert */
+        .raised { display: inline-block; background: #fff1a8; color: var(--text); border-radius: 999px; padding: 2px 8px; font-weight: 700; }
+        .legend .raised { font-size: 11px; padding: 0 6px; }
         tr.ev.sf1 td { background-color: var(--sf1); font-weight: 700; }
         tr.ev.sf2 td { background-color: var(--sf2); font-weight: 700; }
         tr.ev.sf3 td { background-color: var(--sf3); font-weight: 700; color: #fff; }
@@ -295,6 +298,7 @@
             Hochwasser-Zeilen sind leicht blau hinterlegt<br>
             Nipp/Spring = Nipp-/Springzeit (aus der Mondphase berechnet)<br>
             Abw. = Abweichung vom mittleren Hoch-/Niedrigwasser (MHW/MNW) · – = keine Vorhersage der BSH<br>
+            <span class="raised">+0,75</span> Hochwasser ab +0,75 m über MHW<br>
             Hochwasser über MHW (BSH-Einstufung):
             <span class="sf sf1">Sturmflut ab +1,5</span>
             <span class="sf sf2">schwer ab +2,5</span>
@@ -408,6 +412,7 @@
         if (max >= 3.5) return ' sf3';
         if (max >= 2.5) return ' sf2';
         if (max >= 1.5) return ' sf1';
+        if (max >= 0.75) return ' sf0';   // erhöht: nur der Wert wird hervorgehoben (keine BSH-Stufe)
         return '';
     }
 
@@ -710,11 +715,13 @@
                 const dev = fmtDeviation(pick(item, DEVIATION_KEYS));
 
                 const tr = document.createElement('tr');
-                tr.className = 'ev' + (ev === 'HW' ? ' hw' : '') + (d < now ? ' past' : '') + surgeClass(ev, dev.max);
+                const surge = surgeClass(ev, dev.max);
+                tr.className = 'ev' + (ev === 'HW' ? ' hw' : '') + (d < now ? ' past' : '') + surge;
+                const devHtml = surge === ' sf0' ? `<span class="raised">${dev.text}</span>` : dev.text;
                 tr.innerHTML = `
                     <td class="time">${pad(d.getHours())}:${pad(d.getMinutes())}</td>
                     <td class="tide" title="${ev === 'HW' ? 'Hochwasser' : ev === 'NW' ? 'Niedrigwasser' : ev}">${tideHtml}</td>
-                    <td class="dev">${dev.text}</td>
+                    <td class="dev">${devHtml}</td>
                 `;
                 tbody.appendChild(tr);
             });
