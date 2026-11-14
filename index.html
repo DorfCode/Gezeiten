@@ -319,9 +319,12 @@
 <script>
     const API_BASE = 'https://gdi.bsh.de/ldproxy/rest/services/WaterLevelForecast/collections/waterlevelforecastdata/items/';
     const STATIONS = [
-        { id: 'wittduen_hafen', short: 'Wittdün',  name: 'Wittdün Hafen', lat: 54.631667, lon: 8.383889 },
-        { id: 'hooge_anleger',  short: 'Hooge',    name: 'Hooge Anleger', lat: 54.578611, lon: 8.556389 },
-        { id: 'dagebuell',      short: 'Dagebüll', name: 'Dagebüll',      lat: 54.730556, lon: 8.686944 },
+        // windStation: DWD-MOSMIX-Station (WMO-Kennung) für die Windvorhersage.
+        // Echte Messstationen treffen besser als reine Vorhersagepunkte (Vergleich Nov. 2026):
+        // Hooge A201 = Station Hallig Hooge (statt Punkt P0151), Föhr A112 = Station Wrixum (statt Punkt K1407)
+        { id: 'wittduen_hafen', short: 'Wittdün',  name: 'Wittdün Hafen', lat: 54.631667, lon: 8.383889, windStation: 'A112' },
+        { id: 'hooge_anleger',  short: 'Hooge',    name: 'Hooge Anleger', lat: 54.578611, lon: 8.556389, windStation: 'A201' },
+        { id: 'dagebuell',      short: 'Dagebüll', name: 'Dagebüll',      lat: 54.730556, lon: 8.686944, windStation: 'A112' },
     ];
     const DEFAULT_STATION = 'hooge_anleger';
 
@@ -517,7 +520,9 @@
             for (let h = 0; h <= WIND_HOURS; h += WIND_STEP) times.push(start.getTime() + h * 3600e3);
             const last = new Date(times[times.length - 1] + 3 * 3600e3);   // + 2 h Regen für die letzte Spalte
 
-            const url = `${WIND_API}?lat=${station.lat}&lon=${station.lon}`
+            // Vorhersage gezielt für die festgelegte DWD-Station, sonst nächster Punkt zu den Koordinaten
+            const where = station.windStation ? `wmo_station_id=${station.windStation}` : `lat=${station.lat}&lon=${station.lon}`;
+            const url = `${WIND_API}?${where}`
                 + `&date=${encodeURIComponent(start.toISOString())}&last_date=${encodeURIComponent(last.toISOString())}`
                 + `&tz=Europe/Berlin`;
             // parallel: aktuelle Messung für die erste Spalte ("jetzt")
